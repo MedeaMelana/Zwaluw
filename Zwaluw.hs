@@ -1,5 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 
+module Zwaluw where
+
 import Prelude hiding ((.), id)
 import Control.Monad
 import Control.Category
