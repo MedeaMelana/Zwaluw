@@ -15,13 +15,16 @@ data P m a b = P
   { ser :: b -> m (a, String)
   , prs :: String -> m (a -> b, String) }
 
-xmap :: Monad m => (b -> a) -> (a -> b) -> P m t a -> P m t b
+xmap :: MonadPlus m => (b -> a) -> (a -> b) -> P m t a -> P m t b
 xmap f g (P s p) = P (s . f) ((fmap . liftM . first . fmap) g p)
   
-instance Monad m => Category (P m) where
-  id = P (\b -> return (b, "")) (\s -> return (id, s))
+instance MonadPlus m => Category (P m) where
+  id = lit ""
   P sf pf . P sg pg = P 
-    (\a -> sf a >>= \(b, s) -> sg b >>= \(c, s') -> return (c, s ++ s'))
+    (\a -> do
+        (b, s) <- sf a
+        (c, s') <- sg b
+        return (c, s ++ s'))
     (\s -> do
         (f, s') <- pf s
         (g, s'') <- pg s'
@@ -34,10 +37,10 @@ instance MonadPlus m => Monoid (P m a b) where
     (\s -> pf s `mplus` pg s)
 
 parse :: P [] () a -> String -> [a]
-parse p s = map fst $ filter (\(_, s) -> s == "") $ map (first ($ ())) $ prs p s
+parse p = concatMap (\(a, s) -> if (s == "") then [a ()] else []) . prs p
 
 unparse :: P [] () a -> a -> [String]
-unparse p a = map snd $ ser p a
+unparse p = map snd . ser p
 
 maph :: MonadPlus m => (b -> a) -> (a -> b) -> P m i (a, o) -> P m i (b, o)
 maph f g = xmap (first f) (first g)
@@ -74,7 +77,8 @@ digit :: MonadPlus m => P m r (Int, r)
 digit = maph (head . show) (read . (:[])) digitChar
 
 int :: MonadPlus m => P m r (Int, r)
-int = maph show read $ many1 digitChar
+-- int = maph show read $ many1 digitChar
+int = digit
 
 lit :: MonadPlus m => String -> P m r r
 lit l = P
@@ -86,12 +90,14 @@ push h = P
   (\(h', t) -> do guard (h == h'); return (t, ""))
   (\s -> return (\t -> (h, t), s))
 
+left :: MonadPlus m => Constr1 m t (Either a b) a
+left = constr1 Left $ \x -> do Left a <- Just x; return a
+
+right :: MonadPlus m => Constr1 m t (Either a b) b
+right = constr1 Right $ \x -> do Right b <- Just x; return b
+ 
 eitherP :: MonadPlus m => P m t (a, t) -> P m t (b, t) -> P m t (Either a b, t)
-eitherP (P sf pf) (P sg pg) = P
-  (\(e, t) -> case e of
-      Left a -> sf (a, t)
-      Right b -> sg (b, t))
-  (\s -> liftM (first (first Left .)) (pf s) `mplus` liftM (first (first Right .)) (pg s))
+eitherP l r = left . l <> right . r
 
 
 type Constr0 m t o = P m t (o, t)
