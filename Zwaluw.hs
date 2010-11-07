@@ -1,118 +1,127 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, TypeOperators #-}
 
 module Zwaluw where
 
 import Prelude hiding ((.), id)
 import Control.Monad
 import Control.Category
-import Control.Arrow (first, second)
+import Control.Arrow (first)
 import Data.Monoid
 
 infixr 8 <>
+infixr 8 :-
 
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
 
-data P m a b = P
-  { ser :: b -> m (a, String)
-  , prs :: String -> m (a -> b, String) }
+data P a b = P
+  { ser :: b -> [(a, String)]
+  , prs :: String -> [(a -> b, String)] }
 
-xmap :: Monad m => (b -> a) -> (a -> b) -> P m t a -> P m t b
+data a :- b = a :- b deriving (Eq, Show)
+
+xmap :: (b -> a) -> (a -> b) -> P t a -> P t b
 xmap f g (P s p) = P (s . f) ((fmap . liftM . first . fmap) g p)
   
-instance Monad m => Category (P m) where
-  id = P (\b -> return (b, "")) (\s -> return (id, s))
+instance Category (P) where
+  id = lit ""
   P sf pf . P sg pg = P 
-    (\a -> sf a >>= \(b, s) -> sg b >>= \(c, s') -> return (c, s ++ s'))
+    (\a -> do
+        (b, s) <- sf a
+        (c, s') <- sg b
+        return (c, s ++ s'))
     (\s -> do
         (f, s') <- pf s
         (g, s'') <- pg s'
         return (f . g, s''))
 
-instance MonadPlus m => Monoid (P m a b) where
+instance Monoid (P a b) where
   mempty = P (const mzero) (const mzero)
   P sf pf `mappend` P sg pg = P 
     (\s -> sf s `mplus` sg s)
     (\s -> pf s `mplus` pg s)
 
-parse :: P [] () a -> String -> [a]
-parse p s = map fst $ filter (\(_, s) -> s == "") $ map (first ($ ())) $ prs p s
+parse :: P () a -> String -> [a]
+parse p = concatMap (\(a, s) -> if (s == "") then [a ()] else []) . prs p
 
-unparse :: P [] () a -> a -> [String]
-unparse p a = map snd $ ser p a
+unparse :: P () a -> a -> [String]
+unparse p = map snd . ser p
 
-maph :: MonadPlus m => (b -> a) -> (a -> b) -> P m i (a, o) -> P m i (b, o)
-maph f g = xmap (first f) (first g)
+maph :: (b -> a) -> (a -> b) -> P i (a :- o) -> P i (b :- o)
+maph f g = xmap (\(h :- t) -> f h :- t) (\(h :- t) -> g h :- t)
 
-opt :: (MonadPlus m, Eq a) => a -> P m r (a, r) -> P m r (a, r)
+opt :: Eq a => a -> P r (a :- r) -> P r (a :- r)
 opt a p = p <> push a
 
-many :: (MonadPlus m, Eq a) => (forall r. P m r (a, r)) -> P m r ([a], r)
-many p = nil <> many1 p
-
-nil :: MonadPlus m => Constr0 m t [a]
+nil :: Constr0 [a]
 nil = constr0 [] $ \x -> do [] <- Just x; Just ()
 
-cons :: MonadPlus m => Constr2 m t [a] a [a]
+cons :: Constr2 [a] a [a]
 cons = constr2 (:) $ \x -> do a:as <- Just x; Just (a, as)
 
-many1 :: (MonadPlus m, Eq a) => (forall r. P m r (a, r)) -> P m r ([a], r)
+many :: Eq a => (forall r. P r (a :- r)) -> P r ([a] :- r)
+many p = nil <> many1 p
+
+many1 :: Eq a => (forall r. P r (a :- r)) -> P r ([a] :- r)
 many1 p = cons . p . many p
 
-satisfy :: MonadPlus m => (Char -> Bool) -> P m r (Char, r)
+satisfy :: (Char -> Bool) -> P r (Char :- r)
 satisfy p = P
-  (\(c, a) -> if (p c) then return (a, [c]) else mzero)
+  (\(c :- a) -> if (p c) then return (a, [c]) else mzero)
   (\s -> case s of 
     []     -> mzero
-    (c:cs) -> if (p c) then return (\a -> (c, a), cs) else mzero)
+    (c:cs) -> if (p c) then return ((c :-), cs) else mzero)
 
-char :: MonadPlus m => P m r (Char, r)
+char :: P r (Char :- r)
 char = satisfy (const True)
 
-digitChar :: MonadPlus m => P m r (Char, r)
+digitChar :: P r (Char :- r)
 digitChar = satisfy (\c -> c >= '0' && c <= '9')
 
-digit :: MonadPlus m => P m r (Int, r)
+digit :: P r (Int :- r)
 digit = maph (head . show) (read . (:[])) digitChar
 
-int :: MonadPlus m => P m r (Int, r)
-int = maph show read $ many1 digitChar
+int :: P r (Int :- r)
+-- int = maph show read $ many1 digitChar
+int = digit
 
-lit :: MonadPlus m => String -> P m r r
+lit :: String -> P r r
 lit l = P
   (\b -> return (b, l))
   (\s -> let (s1, s2) = splitAt (length l) s in if s1 == l then return (id, s2) else mzero)
 
-push :: (MonadPlus m, Eq h) => h -> P m t (h, t)
+push :: Eq h => h -> P t (h :- t)
 push h = P 
-  (\(h', t) -> do guard (h == h'); return (t, ""))
-  (\s -> return (\t -> (h, t), s))
+  (\(h' :- t) -> do guard (h == h'); return (t, ""))
+  (\s -> return ((h :-), s))
 
-eitherP :: MonadPlus m => P m t (a, t) -> P m t (b, t) -> P m t (Either a b, t)
-eitherP (P sf pf) (P sg pg) = P
-  (\(e, t) -> case e of
-      Left a -> sf (a, t)
-      Right b -> sg (b, t))
-  (\s -> liftM (first (first Left .)) (pf s) `mplus` liftM (first (first Right .)) (pg s))
+left :: Constr1 (Either a b) a
+left = constr1 Left $ \x -> do Left a <- Just x; return a
+
+right :: Constr1 (Either a b) b
+right = constr1 Right $ \x -> do Right b <- Just x; return b
+ 
+eitherP :: P t (a :- t) -> P t (b :- t) -> P t (Either a b :- t)
+eitherP l r = left . l <> right . r
 
 
-type Constr0 m t o = P m t (o, t)
-constr0 :: MonadPlus m => o -> (o -> Maybe ()) -> Constr0 m t o
+type Constr0 o = forall t. P t (o :- t)
+constr0 :: o -> (o -> Maybe ()) -> Constr0 o
 constr0 c d = P 
-  (\(a, t) -> maybe mzero (\_ -> return (t, "")) (d a))
-  (\s -> return (\t -> (c, t), s))
+  (\(a :- t) -> maybe mzero (\_ -> return (t, "")) (d a))
+  (\s -> return ((c :-), s))
 
-type Constr1 m t o a = P m (a, t) (o, t) 
-constr1 :: MonadPlus m => (a -> o) -> (o -> Maybe a) -> Constr1 m t o a
+type Constr1 o a = forall t. P (a :- t) (o :- t) 
+constr1 :: (a -> o) -> (o -> Maybe a) -> Constr1 o a
 constr1 c d = P
-  (\(a, t) -> maybe mzero (\a -> return ((a, t), "")) (d a))
-  (\s -> return (\(a, t) -> (c a, t), s))
+  (\(a :- t) -> maybe mzero (\a -> return (a :- t, "")) (d a))
+  (\s -> return (\(a :- t) -> c a :- t, s))
 
-type Constr2 m t o a b = P m (a, (b, t)) (o, t) 
-constr2 :: MonadPlus m => (a -> b -> o) -> (o -> Maybe (a, b)) -> Constr2 m t o a b
+type Constr2 o a b = forall t. P (a :- b :- t) (o :- t) 
+constr2 :: (a -> b -> o) -> (o -> Maybe (a, b)) -> Constr2 o a b
 constr2 c d = P
-  (\(a, t) -> maybe mzero (\(a, b) -> return ((a, (b, t)), "")) (d a))
-  (\s -> return (\(a, (b, t)) -> (c a b, t), s))
+  (\(a :- t) -> maybe mzero (\(a, b) -> return (a :- b :- t, "")) (d a))
+  (\s -> return (\(a :- b :- t) -> c a b :- t, s))
 
 
 
@@ -123,22 +132,22 @@ data Sitemap
    | CaseDetail Int
    deriving (Eq, Show)
 
-home :: MonadPlus m => Constr0 m t Sitemap
+home :: Constr0 Sitemap
 home = constr0 Home $ \a -> do Home <- Just a; Just ()
 
-caseOverview :: MonadPlus m => Constr0 m t Sitemap
+caseOverview :: Constr0 Sitemap
 caseOverview = constr0 CaseOverview $ \a -> do CaseOverview <- Just a; Just ()
 
-caseDetail :: MonadPlus m => Constr1 m t Sitemap Int
+caseDetail :: Constr1 Sitemap Int
 caseDetail = constr1 CaseDetail $ \a -> do CaseDetail i <- Just a; Just i
 
-range :: MonadPlus m => Constr2 m t Sitemap Int Int
+range :: Constr2 Sitemap Int Int
 range = constr2 Range $ \a -> do Range l u <- Just a; Just (l, u)
 
-slash :: MonadPlus m => P m r r
+slash :: P r r
 slash = lit "/"
 
-url :: MonadPlus m => P m t (Sitemap, t)
+url :: P t (Sitemap :- t)
 url = 
   slash . 
   (  home . lit "home"
