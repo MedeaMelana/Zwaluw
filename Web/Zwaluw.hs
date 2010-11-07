@@ -1,4 +1,5 @@
-{-# LANGUAGE RankNTypes, TypeOperators #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Web.Zwaluw where
 
@@ -104,6 +105,8 @@ right = constr1 Right $ \x -> do Right b <- Just x; return b
 eitherP :: P t (a :- t) -> P t (b :- t) -> P t (Either a b :- t)
 eitherP l r = left . l <> right . r
 
+slash :: P r r
+slash = lit "/"
 
 type Constr0 o = forall t. P t (o :- t)
 constr0 :: o -> (o -> Maybe ()) -> Constr0 o
@@ -122,38 +125,3 @@ constr2 :: (a -> b -> o) -> (o -> Maybe (a, b)) -> Constr2 o a b
 constr2 c d = P
   (\(a :- t) -> maybe mzero (\(a, b) -> return (a :- b :- t, "")) (d a))
   (\s -> return (\(a :- b :- t) -> c a b :- t, s))
-
-
-
-data Sitemap
-   = Home
-   | Range Int Int
-   | CaseOverview
-   | CaseDetail Int
-   deriving (Eq, Show)
-
-home :: Constr0 Sitemap
-home = constr0 Home $ \a -> do Home <- Just a; Just ()
-
-caseOverview :: Constr0 Sitemap
-caseOverview = constr0 CaseOverview $ \a -> do CaseOverview <- Just a; Just ()
-
-caseDetail :: Constr1 Sitemap Int
-caseDetail = constr1 CaseDetail $ \a -> do CaseDetail i <- Just a; Just i
-
-range :: Constr2 Sitemap Int Int
-range = constr2 Range $ \a -> do Range l u <- Just a; Just (l, u)
-
-slash :: P r r
-slash = lit "/"
-
-url :: P t (Sitemap :- t)
-url = 
-  slash . 
-  (  home . lit "home"
-  <> lit "cases" .
-       (  caseOverview
-       <> caseDetail . slash . int
-       )
-  <> range . lit "range" . slash . int . slash . int
-  )
