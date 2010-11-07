@@ -7,6 +7,7 @@ module Web.Zwaluw (
     
     -- * Running routers
     parse, unparse,
+    parse1, unparse1,
     
     -- * Constructing routers
     -- | The @constrN@ functions are helper functions to lift constructors of
@@ -59,8 +60,14 @@ instance Monoid (Router a b) where
 parse :: Router () a -> String -> [a]
 parse p = concatMap (\(a, s) -> if (s == "") then [a ()] else []) . prs p
 
+parse1 :: Router () (a :- ()) -> String -> [a]
+parse1 p s = map (\(r :- ()) -> r) (parse p s)
+
 unparse :: Router () a -> a -> [String]
 unparse p = map snd . ser p
+
+unparse1 :: Router () (a :- ()) -> a -> [String]
+unparse1 p x = unparse p (x :- ())
 
 maph :: (b -> a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
 maph f g = xmap (\(h :- t) -> f h :- t) (\(h :- t) -> g h :- t)
@@ -97,17 +104,17 @@ digit :: Router r (Int :- r)
 digit = maph (head . show) (read . (:[])) digitChar
 
 
--- | Insert a constant string.
+-- | Routes a constant string.
 lit :: String -> Router r r
 lit l = Router
   (\b -> return (b, l))
   (\s -> let (s1, s2) = splitAt (length l) s in if s1 == l then return (id, s2) else mzero)
 
--- | Insert a slash.
+-- | Routes a slash.
 slash :: Router r r
 slash = lit "/"
 
--- | Insert any integer.
+-- | Routes any integer.
 int :: Router r (Int :- r)
 -- int = maph show read $ many1 digitChar
 int = digit
