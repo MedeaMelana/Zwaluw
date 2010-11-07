@@ -138,7 +138,7 @@ eitherP l r = left . l <> right . r
 -- | For example:
 -- 
 -- > nil :: Router r ([a] :- r)
--- > nil = constr0 [] $ \x -> do [] <- Just x; Just ()
+-- > nil = constr0 [] $ \x -> do [] <- x; Just ()
 constr0 :: o -> (Maybe o -> Maybe ()) -> Router r (o :- r)
 constr0 c d = Router 
   (\(a :- t) -> maybe mzero (\_ -> return (t, "")) (d (return a)))
@@ -147,7 +147,7 @@ constr0 c d = Router
 -- | For example:
 --
 -- > left :: Router (a :- r) (Either a b :- r)
--- > left = constr1 Left $ \x -> do Left a <- Just x; return a
+-- > left = constr1 Left $ \x -> do Left a <- x; return a
 constr1 :: (a -> o) -> (Maybe o -> Maybe a) -> Router (a :- r) (o :- r)
 constr1 c d = Router
   (\(a :- t) -> maybe mzero (\a -> return (a :- t, "")) (d (return a)))
@@ -156,7 +156,7 @@ constr1 c d = Router
 -- | For example:
 --
 -- > cons :: Router (a :- [a] :- r) ([a] :- r)
--- > cons = constr2 (:) $ \x -> do a:as <- Just x; Just (a, as)
+-- > cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
 constr2 :: (a -> b -> o) -> (Maybe o -> Maybe (a, b)) ->
   Router (a :- b :- r) (o :- r)
 constr2 c d = Router
