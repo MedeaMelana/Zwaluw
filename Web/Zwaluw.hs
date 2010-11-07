@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, TypeOperators #-}
 
-module Zwaluw where
+module Web.Zwaluw where
 
 import Prelude hiding ((.), id)
 import Control.Monad
