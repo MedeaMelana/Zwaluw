@@ -9,6 +9,7 @@ Maintainer:     martijn@van.steenbergen.nl
 Stability:      Experimental
 Copyright:      Some Rights Reserved (CC) 2010 Sjoerd Visscher, Martijn van Steenbergen
 Homepage:       https://github.com/MedeaMelana/Zwaluw
+Bug-reports:    https://github.com/MedeaMelana/Zwaluw/issues
 
 
 Cabal-Version:  >= 1.2
