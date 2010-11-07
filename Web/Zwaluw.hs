@@ -3,7 +3,7 @@
 
 module Web.Zwaluw (
     -- * Types
-    P, (:-)(..), (<>),
+    Router, (:-)(..), (<>),
     
     -- * Running routers
     parse, unparse,
@@ -29,18 +29,18 @@ infixr 8 :-
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
 
-data P a b = P
+data Router a b = Router
   { ser :: b -> [(a, String)]
   , prs :: String -> [(a -> b, String)] }
 
 data a :- b = a :- b deriving (Eq, Show)
 
-xmap :: (b -> a) -> (a -> b) -> P r a -> P r b
-xmap f g (P s p) = P (s . f) ((fmap . liftM . first . fmap) g p)
+xmap :: (b -> a) -> (a -> b) -> Router r a -> Router r b
+xmap f g (Router s p) = Router (s . f) ((fmap . liftM . first . fmap) g p)
   
-instance Category (P) where
+instance Category (Router) where
   id = lit ""
-  P sf pf . P sg pg = P 
+  Router sf pf . Router sg pg = Router 
     (\a -> do
         (b, s) <- sf a
         (c, s') <- sg b
@@ -50,109 +50,109 @@ instance Category (P) where
         (g, s'') <- pg s'
         return (f . g, s''))
 
-instance Monoid (P a b) where
-  mempty = P (const mzero) (const mzero)
-  P sf pf `mappend` P sg pg = P 
+instance Monoid (Router a b) where
+  mempty = Router (const mzero) (const mzero)
+  Router sf pf `mappend` Router sg pg = Router 
     (\s -> sf s `mplus` sg s)
     (\s -> pf s `mplus` pg s)
 
-parse :: P () a -> String -> [a]
+parse :: Router () a -> String -> [a]
 parse p = concatMap (\(a, s) -> if (s == "") then [a ()] else []) . prs p
 
-unparse :: P () a -> a -> [String]
+unparse :: Router () a -> a -> [String]
 unparse p = map snd . ser p
 
-maph :: (b -> a) -> (a -> b) -> P i (a :- o) -> P i (b :- o)
+maph :: (b -> a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
 maph f g = xmap (\(h :- t) -> f h :- t) (\(h :- t) -> g h :- t)
 
-opt :: Eq a => a -> P r (a :- r) -> P r (a :- r)
+opt :: Eq a => a -> Router r (a :- r) -> Router r (a :- r)
 opt a p = p <> push a
 
-nil :: P r ([a] :- r)
+nil :: Router r ([a] :- r)
 nil = constr0 [] $ \x -> do [] <- x; Just ()
 
-cons :: P (a :- [a] :- r) ([a] :- r)
+cons :: Router (a :- [a] :- r) ([a] :- r)
 cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
 
--- many :: Eq a => (forall r. P r (a :- r)) -> P r ([a] :- r)
+-- many :: Eq a => (forall r. Router r (a :- r)) -> Router r ([a] :- r)
 -- many p = nil <> many1 p
 
--- many1 :: Eq a => (forall r. P r (a :- r)) -> P r ([a] :- r)
+-- many1 :: Eq a => (forall r. Router r (a :- r)) -> Router r ([a] :- r)
 -- many1 p = cons . p . many p
 
-satisfy :: (Char -> Bool) -> P r (Char :- r)
-satisfy p = P
+satisfy :: (Char -> Bool) -> Router r (Char :- r)
+satisfy p = Router
   (\(c :- a) -> if (p c) then return (a, [c]) else mzero)
   (\s -> case s of 
     []     -> mzero
     (c:cs) -> if (p c) then return ((c :-), cs) else mzero)
 
-char :: P r (Char :- r)
+char :: Router r (Char :- r)
 char = satisfy (const True)
 
-digitChar :: P r (Char :- r)
+digitChar :: Router r (Char :- r)
 digitChar = satisfy (\c -> c >= '0' && c <= '9')
 
-digit :: P r (Int :- r)
+digit :: Router r (Int :- r)
 digit = maph (head . show) (read . (:[])) digitChar
 
 
 -- | Insert a constant string.
-lit :: String -> P r r
-lit l = P
+lit :: String -> Router r r
+lit l = Router
   (\b -> return (b, l))
   (\s -> let (s1, s2) = splitAt (length l) s in if s1 == l then return (id, s2) else mzero)
 
 -- | Insert a slash.
-slash :: P r r
+slash :: Router r r
 slash = lit "/"
 
 -- | Insert any integer.
-int :: P r (Int :- r)
+int :: Router r (Int :- r)
 -- int = maph show read $ many1 digitChar
 int = digit
 
 
 
-push :: Eq h => h -> P r (h :- r)
-push h = P 
+push :: Eq h => h -> Router r (h :- r)
+push h = Router 
   (\(h' :- t) -> do guard (h == h'); return (t, ""))
   (\s -> return ((h :-), s))
 
-left :: P (a :- r) (Either a b :- r)
+left :: Router (a :- r) (Either a b :- r)
 left = constr1 Left $ \x -> do Left a <- x; return a
 
-right :: P (b :- r) (Either a b :- r)
+right :: Router (b :- r) (Either a b :- r)
 right = constr1 Right $ \x -> do Right b <- x; return b
 
-eitherP :: P r (a :- r) -> P r (b :- r) -> P r (Either a b :- r)
+eitherP :: Router r (a :- r) -> Router r (b :- r) -> Router r (Either a b :- r)
 eitherP l r = left . l <> right . r
 
 -- | For example:
 -- 
--- > nil :: P r ([a] :- r)
+-- > nil :: Router r ([a] :- r)
 -- > nil = constr0 [] $ \x -> do [] <- Just x; Just ()
-constr0 :: o -> (Maybe o -> Maybe ()) -> P r (o :- r)
-constr0 c d = P 
+constr0 :: o -> (Maybe o -> Maybe ()) -> Router r (o :- r)
+constr0 c d = Router 
   (\(a :- t) -> maybe mzero (\_ -> return (t, "")) (d (return a)))
   (\s -> return ((c :-), s))
 
 -- | For example:
 --
--- > left :: P (a :- r) (Either a b :- r)
+-- > left :: Router (a :- r) (Either a b :- r)
 -- > left = constr1 Left $ \x -> do Left a <- Just x; return a
-constr1 :: (a -> o) -> (Maybe o -> Maybe a) -> P (a :- r) (o :- r)
-constr1 c d = P
+constr1 :: (a -> o) -> (Maybe o -> Maybe a) -> Router (a :- r) (o :- r)
+constr1 c d = Router
   (\(a :- t) -> maybe mzero (\a -> return (a :- t, "")) (d (return a)))
   (\s -> return (\(a :- t) -> c a :- t, s))
 
 -- | For example:
 --
--- > cons :: P (a :- [a] :- r) ([a] :- r)
+-- > cons :: Router (a :- [a] :- r) ([a] :- r)
 -- > cons = constr2 (:) $ \x -> do a:as <- Just x; Just (a, as)
 constr2 :: (a -> b -> o) -> (Maybe o -> Maybe (a, b)) ->
-  P (a :- b :- r) (o :- r)
-constr2 c d = P
+  Router (a :- b :- r) (o :- r)
+constr2 c d = Router
   (\(a :- t) ->
     maybe mzero (\(a, b) -> return (a :- b :- t, "")) (d (return a)))
   (\s -> return (\(a :- b :- t) -> c a b :- t, s))
