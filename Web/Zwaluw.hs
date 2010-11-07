@@ -14,7 +14,7 @@ module Web.Zwaluw (
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
     constr0, constr1, constr2,
-    int, string, val, slash, lit
+    int, string, part, val, slash, lit
   ) where
 
 import Prelude hiding ((.), id)
@@ -36,20 +36,36 @@ data Router a b = Router
 
 data a :- b = a :- b deriving (Eq, Show)
 
+hhead :: (a :- b) -> a
+hhead (a :- _) = a
+
+htail :: (a :- b) -> b
+htail (_ :- b) = b
+
 xmap :: (b -> a) -> (a -> b) -> Router r a -> Router r b
 xmap f g (Router s p) = Router (s . f) ((fmap . liftM . first . fmap) g p)
   
 instance Category (Router) where
   id = lit ""
-  Router sf pf . Router sg pg = Router 
-    (\a -> do
-        (b, s) <- sf a
-        (c, s') <- sg b
-        return (c, s ++ s'))
-    (\s -> do
-        (f, s') <- pf s
-        (g, s'') <- pg s'
-        return (f . g, s''))
+  Router sf pf . Router sg pg = Router (composeS sf sg) (composeP pf pg)
+
+composeS 
+  :: (a -> [(b, String)]) 
+  -> (b -> [(c, String)]) 
+  -> (a -> [(c, String)])
+composeS sf sg a = do
+  (b, s) <- sf a
+  (c, s') <- sg b
+  return (c, s ++ s')
+
+composeP
+  :: (String -> [(b -> c, String)])
+  -> (String -> [(a -> b, String)])
+  -> (String -> [(a -> c, String)])
+composeP pf pg s = do
+  (f, s') <- pf s
+  (g, s'') <- pg s'
+  return (f . g, s'')
 
 instance Monoid (Router a b) where
   mempty = Router (const mzero) (const mzero)
@@ -81,11 +97,21 @@ nil = constr0 [] $ \x -> do [] <- x; Just ()
 cons :: Router (a :- [a] :- r) ([a] :- r)
 cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
 
--- many :: Eq a => (forall r. Router r (a :- r)) -> Router r ([a] :- r)
+many :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
 -- many p = nil <> many1 p
+many router = Router ms mp where
+  ms ([] :- r) = return (r, "")
+  ms ((a:as) :- r) = composeS (ser router) ms (a :- as :- r)
+  mp s = let res = (prs router) s in
+    case res of
+      [] -> return (([] :-), s)
+      _  -> do
+        (f, s') <- res
+        (fs, s'') <- mp s'
+        return ((\(a :- as :- r) -> (a:as) :- r) . f . fs, s'')
 
--- many1 :: Eq a => (forall r. Router r (a :- r)) -> Router r ([a] :- r)
--- many1 p = cons . p . many p
+many1 :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
+many1 p = cons . p . many p
 
 satisfy :: (Char -> Bool) -> Router r (Char :- r)
 satisfy p = Router
@@ -123,7 +149,11 @@ string :: Router r (String :- r)
 string = Router
   (\(s :- r) -> return (r, s))
   (\s -> return ((s :-), ""))
-  
+
+-- | Routes part of a URL, i.e. a String not containing '/' or '?'.
+part :: Router r (String :- r)
+part = many (satisfy (\c -> c /= '/' && c /= '?'))
+
 -- | Routes any value that has a Show and Read instance.
 val :: (Show a, Read a) => Router r (a :- r)
 val = Router
