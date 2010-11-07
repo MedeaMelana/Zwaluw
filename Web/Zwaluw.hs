@@ -14,7 +14,7 @@ module Web.Zwaluw (
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
     constr0, constr1, constr2,
-    int, slash, lit
+    int, string, val, slash, lit
   ) where
 
 import Prelude hiding ((.), id)
@@ -116,10 +116,19 @@ slash = lit "/"
 
 -- | Routes any integer.
 int :: Router r (Int :- r)
--- int = maph show read $ many1 digitChar
-int = Router
-  (\(i :- a) -> return (a, show i))
-  (\s -> let l = reads s in map (first (:-)) l)
+int = val
+
+-- | Routes any string.
+string :: Router r (String :- r)
+string = Router
+  (\(s :- r) -> return (r, s))
+  (\s -> return ((s :-), ""))
+  
+-- | Routes any value that has a Show and Read instance.
+val :: (Show a, Read a) => Router r (a :- r)
+val = Router
+  (\(a :- r) -> return (r, show a))
+  (map (first (:-)) . reads)
 
 
 
