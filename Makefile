@@ -1,5 +1,5 @@
 default:
-	ghci Zwaluw
+	ghci Example
 
 clean:
 	rm -rf dist
