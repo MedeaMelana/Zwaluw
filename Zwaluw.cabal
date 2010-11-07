@@ -1,0 +1,23 @@
+Name:           Zwaluw
+Version:        0.1
+Synopsis:       Combinators for bidirectional URL routing
+Description:   	Combinators for bidirectional URL routing
+
+
+Author:         Sjoerd Visscher, Martijn van Steenbergen
+Maintainer:     martijn@van.steenbergen.nl
+Stability:      Experimental
+Copyright:      Some Rights Reserved (CC) 2010 Sjoerd Visscher, Martijn van Steenbergen
+Homepage:       https://github.com/MedeaMelana/Zwaluw
+
+
+Cabal-Version:  >= 1.2
+License:        BSD3
+License-file:   LICENSE
+Category:       Text
+Build-type:     Simple
+
+
+Library
+  Exposed-Modules:  Zwaluw
+  Build-Depends: mtl, base >= 4 && < 5
