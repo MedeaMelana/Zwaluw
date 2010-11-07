@@ -1,6 +1,9 @@
 default:
 	ghci Zwaluw
 
+clean:
+	rm -rf dist
+
 configure:
 	cabal configure
 
