@@ -74,10 +74,10 @@ instance Monoid (Router a b) where
     (\s -> pf s `mplus` pg s)
 
 parse :: Router () a -> String -> [a]
-parse p = concatMap (\(a, s) -> if (s == "") then [a ()] else []) . prs p
+parse p s = [ a () | (a, "") <- prs p s ]
 
 parse1 :: Router () (a :- ()) -> String -> [a]
-parse1 p s = map (\(r :- ()) -> r) (parse p s)
+parse1 p = map hhead . parse p
 
 unparse :: Router () a -> a -> [String]
 unparse p = map snd . ser p
