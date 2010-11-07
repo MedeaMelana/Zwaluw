@@ -21,4 +21,4 @@ Build-type:     Simple
 
 Library
   Exposed-Modules:  Web.Zwaluw
-  Build-Depends: mtl, base >= 4 && < 5
+  Build-Depends:    base >= 4 && < 5
