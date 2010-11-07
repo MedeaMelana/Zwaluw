@@ -117,7 +117,9 @@ slash = lit "/"
 -- | Routes any integer.
 int :: Router r (Int :- r)
 -- int = maph show read $ many1 digitChar
-int = digit
+int = Router
+  (\(i :- a) -> return (a, show i))
+  (\s -> let l = reads s in map (first (:-)) l)
 
 
 
