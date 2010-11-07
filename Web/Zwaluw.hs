@@ -69,10 +69,10 @@ opt :: Eq a => a -> P r (a :- r) -> P r (a :- r)
 opt a p = p <> push a
 
 nil :: P r ([a] :- r)
-nil = constr0 [] $ \x -> do [] <- Just x; Just ()
+nil = constr0 [] $ \x -> do [] <- x; Just ()
 
 cons :: P (a :- [a] :- r) ([a] :- r)
-cons = constr2 (:) $ \x -> do a:as <- Just x; Just (a, as)
+cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
 
 -- many :: Eq a => (forall r. P r (a :- r)) -> P r ([a] :- r)
 -- many p = nil <> many1 p
@@ -120,11 +120,11 @@ push h = P
   (\s -> return ((h :-), s))
 
 left :: P (a :- r) (Either a b :- r)
-left = constr1 Left $ \x -> do Left a <- Just x; return a
+left = constr1 Left $ \x -> do Left a <- x; return a
 
 right :: P (b :- r) (Either a b :- r)
-right = constr1 Right $ \x -> do Right b <- Just x; return b
- 
+right = constr1 Right $ \x -> do Right b <- x; return b
+
 eitherP :: P r (a :- r) -> P r (b :- r) -> P r (Either a b :- r)
 eitherP l r = left . l <> right . r
 
@@ -132,25 +132,27 @@ eitherP l r = left . l <> right . r
 -- 
 -- > nil :: P r ([a] :- r)
 -- > nil = constr0 [] $ \x -> do [] <- Just x; Just ()
-constr0 :: o -> (o -> Maybe ()) -> P r (o :- r)
+constr0 :: o -> (Maybe o -> Maybe ()) -> P r (o :- r)
 constr0 c d = P 
-  (\(a :- t) -> maybe mzero (\_ -> return (t, "")) (d a))
+  (\(a :- t) -> maybe mzero (\_ -> return (t, "")) (d (return a)))
   (\s -> return ((c :-), s))
 
 -- | For example:
 --
 -- > left :: P (a :- r) (Either a b :- r)
 -- > left = constr1 Left $ \x -> do Left a <- Just x; return a
-constr1 :: (a -> o) -> (o -> Maybe a) -> P (a :- r) (o :- r)
+constr1 :: (a -> o) -> (Maybe o -> Maybe a) -> P (a :- r) (o :- r)
 constr1 c d = P
-  (\(a :- t) -> maybe mzero (\a -> return (a :- t, "")) (d a))
+  (\(a :- t) -> maybe mzero (\a -> return (a :- t, "")) (d (return a)))
   (\s -> return (\(a :- t) -> c a :- t, s))
 
 -- | For example:
 --
 -- > cons :: P (a :- [a] :- r) ([a] :- r)
 -- > cons = constr2 (:) $ \x -> do a:as <- Just x; Just (a, as)
-constr2 :: (a -> b -> o) -> (o -> Maybe (a, b)) -> P (a :- b :- r) (o :- r)
+constr2 :: (a -> b -> o) -> (Maybe o -> Maybe (a, b)) ->
+  P (a :- b :- r) (o :- r)
 constr2 c d = P
-  (\(a :- t) -> maybe mzero (\(a, b) -> return (a :- b :- t, "")) (d a))
+  (\(a :- t) ->
+    maybe mzero (\(a, b) -> return (a :- b :- t, "")) (d (return a)))
   (\s -> return (\(a :- b :- t) -> c a b :- t, s))
