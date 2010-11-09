@@ -45,9 +45,9 @@ htail (_ :- b) = b
 xmap :: (b -> a) -> (a -> b) -> Router r a -> Router r b
 xmap f g (Router s p) = Router (s . f) ((fmap . liftM . first . fmap) g p)
   
-instance Category (Router) where
+instance Category Router where
   id = lit ""
-  Router sf pf . Router sg pg = Router (composeS sf sg) (composeP pf pg)
+  ~(Router sf pf) . ~(Router sg pg) = Router (composeS sf sg) (composeP pf pg)
 
 composeS 
   :: (a -> [(b, String)]) 
@@ -69,7 +69,7 @@ composeP pf pg s = do
 
 instance Monoid (Router a b) where
   mempty = Router (const mzero) (const mzero)
-  Router sf pf `mappend` Router sg pg = Router 
+  ~(Router sf pf) `mappend` ~(Router sg pg) = Router 
     (\s -> sf s `mplus` sg s)
     (\s -> pf s `mplus` pg s)
 
