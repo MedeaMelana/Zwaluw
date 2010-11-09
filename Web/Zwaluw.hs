@@ -18,7 +18,7 @@ module Web.Zwaluw (
   ) where
 
 import Prelude hiding ((.), id)
-import Control.Monad
+import Control.Monad (mzero, mplus, guard)
 import Control.Category
 import Control.Arrow (first)
 import Data.Monoid
@@ -43,29 +43,38 @@ htail :: (a :- b) -> b
 htail (_ :- b) = b
 
 xmap :: (b -> a) -> (a -> b) -> Router r a -> Router r b
-xmap f g (Router s p) = Router (s . f) ((fmap . liftM . first . fmap) g p)
+xmap f g (Router s p) = Router (s . f) ((fmap . fmap . first . fmap) g p)
   
 instance Category Router where
   id = lit ""
-  ~(Router sf pf) . ~(Router sg pg) = Router (composeS sf sg) (composeP pf pg)
+  ~(Router sf pf) . ~(Router sg pg) = Router 
+    (composeS (++) sf sg) 
+    (composeP (.) pf pg)
+
+(.~) :: Router a b -> Router b c -> Router a c
+~(Router sf pf) .~ ~(Router sg pg) = Router 
+  (composeS (flip (++)) sg sf)
+  (composeP (flip (.)) pf pg)
 
 composeS 
-  :: (a -> [(b, String)]) 
+  :: (String -> String -> String)
+  -> (a -> [(b, String)]) 
   -> (b -> [(c, String)]) 
   -> (a -> [(c, String)])
-composeS sf sg a = do
+composeS op sf sg a = do
   (b, s) <- sf a
   (c, s') <- sg b
-  return (c, s ++ s')
+  return (c, s `op` s')
 
 composeP
-  :: (String -> [(b -> c, String)])
-  -> (String -> [(a -> b, String)])
-  -> (String -> [(a -> c, String)])
-composeP pf pg s = do
+  :: (a -> b -> c)
+  -> (String -> [(a, String)])
+  -> (String -> [(b, String)])
+  -> (String -> [(c, String)])
+composeP op pf pg s = do
   (f, s') <- pf s
   (g, s'') <- pg s'
-  return (f . g, s'')
+  return (f `op` g, s'')
 
 instance Monoid (Router a b) where
   mempty = Router (const mzero) (const mzero)
@@ -88,30 +97,14 @@ unparse1 p x = unparse p (x :- ())
 maph :: (b -> a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
 maph f g = xmap (\(h :- t) -> f h :- t) (\(h :- t) -> g h :- t)
 
-opt :: Eq a => a -> Router r (a :- r) -> Router r (a :- r)
-opt a p = p <> push a
+opt :: Router r r -> Router r r
+opt = (<> id)
 
-nil :: Router r ([a] :- r)
-nil = constr0 [] $ \x -> do [] <- x; Just ()
+many :: Router r r -> Router r r
+many = opt . some
 
-cons :: Router (a :- [a] :- r) ([a] :- r)
-cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
-
-many :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
--- many p = nil <> many1 p
-many router = Router ms mp where
-  ms ([] :- r) = return (r, "")
-  ms ((a:as) :- r) = composeS (ser router) ms (a :- as :- r)
-  mp s = let res = (prs router) s in
-    case res of
-      [] -> return (([] :-), s)
-      _  -> do
-        (f, s') <- res
-        (fs, s'') <- mp s'
-        return ((\(a :- as :- r) -> (a:as) :- r) . f . fs, s'')
-
-many1 :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
-many1 p = cons . p . many p
+some :: Router r r -> Router r r
+some p = p . many p
 
 satisfy :: (Char -> Bool) -> Router r (Char :- r)
 satisfy p = Router
@@ -128,6 +121,30 @@ digitChar = satisfy (\c -> c >= '0' && c <= '9')
 
 digit :: Router r (Int :- r)
 digit = maph (head . show) (read . (:[])) digitChar
+
+push :: Eq h => h -> Router r (h :- r)
+push h = Router 
+  (\(h' :- t) -> do guard (h == h'); return (t, ""))
+  (\s -> return ((h :-), s))
+
+nil :: Router r ([a] :- r)
+nil = constr0 [] $ \x -> do [] <- x; Just ()
+
+cons :: Router (a :- [a] :- r) ([a] :- r)
+cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
+
+listP :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
+listP r = many (cons . r) . nil
+
+left :: Router (a :- r) (Either a b :- r)
+left = constr1 Left $ \x -> do Left a <- x; return a
+
+right :: Router (b :- r) (Either a b :- r)
+right = constr1 Right $ \x -> do Right b <- x; return b
+
+eitherP :: Router r (a :- r) -> Router r (b :- r) -> Router r (Either a b :- r)
+eitherP l r = left . l <> right . r
+
 
 
 -- | Routes a constant string.
@@ -152,7 +169,7 @@ string = Router
 
 -- | Routes part of a URL, i.e. a String not containing '/' or '?'.
 part :: Router r (String :- r)
-part = many (satisfy (\c -> c /= '/' && c /= '?'))
+part = listP (satisfy (\c -> c /= '/' && c /= '?'))
 
 -- | Routes any value that has a Show and Read instance.
 val :: (Show a, Read a) => Router r (a :- r)
@@ -161,20 +178,6 @@ val = Router
   (map (first (:-)) . reads)
 
 
-
-push :: Eq h => h -> Router r (h :- r)
-push h = Router 
-  (\(h' :- t) -> do guard (h == h'); return (t, ""))
-  (\s -> return ((h :-), s))
-
-left :: Router (a :- r) (Either a b :- r)
-left = constr1 Left $ \x -> do Left a <- x; return a
-
-right :: Router (b :- r) (Either a b :- r)
-right = constr1 Right $ \x -> do Right b <- x; return b
-
-eitherP :: Router r (a :- r) -> Router r (b :- r) -> Router r (Either a b :- r)
-eitherP l r = left . l <> right . r
 
 -- | For example:
 -- 
