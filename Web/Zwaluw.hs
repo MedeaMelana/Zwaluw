@@ -15,7 +15,9 @@ module Web.Zwaluw (
     -- second argument is a (partial) destructor.
   , constr0, constr1, constr2, constr3
   , int, string, part, val, slash, lit
-  , opt, many, some, chainr1, duck, satisfy
+  , opt, duck, satisfy
+  , manyr, somer, chainr1 
+  , manyl, somel, chainl1
   , nilP, consP, listP
   , leftP, rightP, eitherP
   , nothingP, justP, maybeP
@@ -107,14 +109,24 @@ maph f g = xmap (\(h :- t) -> f h :- t) (\(h :- t) -> g h :- t)
 opt :: Router r r -> Router r r
 opt = (<> id)
 
-many :: Router r r -> Router r r
-many = opt . some
+manyr :: Router r r -> Router r r
+manyr = opt . somer
 
-some :: Router r r -> Router r r
-some p = p . many p
+somer :: Router r r -> Router r r
+somer p = p . manyr p
 
 chainr1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> Router r (a :- r)
-chainr1 p op = many (p .~ op) . p
+chainr1 p op = manyr (p .~ op) . p
+
+manyl :: Router r r -> Router r r
+manyl = opt . somel
+
+somel :: Router r r -> Router r r
+somel p = p .~ manyl p
+
+chainl1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> Router r (a :- r)
+chainl1 p op = p .~ manyl (op . duck p)
+
 
 apply :: Router ((b -> a) :- r) ((a -> b) :- r) -> Router (a :- r) (b :- r)
 apply r = Router
@@ -157,7 +169,7 @@ consP :: Router (a :- [a] :- r) ([a] :- r)
 consP = constr2 (:) $ \x -> do a:as <- x; return (a, as)
 
 listP :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
-listP r = many (consP . r) . nilP
+listP r = manyr (consP . r) . nilP
 
 
 leftP :: Router (a :- r) (Either a b :- r)
