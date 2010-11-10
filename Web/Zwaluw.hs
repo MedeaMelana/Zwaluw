@@ -3,7 +3,7 @@
 
 module Web.Zwaluw (
     -- * Types
-    Router, (:-)(..), (<>),
+    Router, (:-)(..), (<>), (.~),
     
     -- * Running routers
     parse, unparse,
@@ -13,8 +13,11 @@ module Web.Zwaluw (
     -- | The @constrN@ functions are helper functions to lift constructors of
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
-    constr0, constr1, constr2,
-    int, string, part, val, slash, lit
+    constr0, constr1, constr2, constr3,
+    int, string, part, val, slash, lit,
+    opt, many, some, satisfy,
+    nil, cons, listP,
+    left, right, eitherP
   ) where
 
 import Prelude hiding ((.), id)
@@ -25,6 +28,7 @@ import Data.Monoid
 
 infixr 8 <>
 infixr 8 :-
+infixr 9 .~
 
 -- | Infix operator for 'mappend'.
 (<>) :: Monoid m => m -> m -> m
@@ -207,3 +211,14 @@ constr2 c d = Router
   (\(a :- t) ->
     maybe mzero (\(a, b) -> return (a :- b :- t, "")) (d (return a)))
   (\s -> return (\(a :- b :- t) -> c a b :- t, s))
+
+-- | For example:
+--
+-- > ifte :: Router (Bool :- Expr :- Expr :- r) (Expr :- r)
+-- > ifte = constr3 IfThenElse $ \x -> do IfThenElse b t e <- x; return (b, t, e)
+constr3 :: (a -> b -> c -> o) -> (Maybe o -> Maybe (a, b, c)) ->
+  Router (a :- b :- c :- r) (o :- r)
+constr3 c d = Router
+  (\(a :- t) ->
+    maybe mzero (\(a, b, c) -> return (a :- b :- c :- t, "")) (d (return a)))
+  (\s -> return (\(i :- j :- k :- t) -> c i j k :- t, s))
