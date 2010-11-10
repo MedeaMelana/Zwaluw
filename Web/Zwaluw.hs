@@ -3,21 +3,23 @@
 
 module Web.Zwaluw (
     -- * Types
-    Router, (:-)(..), (<>), (.~),
+    Router, (:-)(..), (<>), (.~)
     
     -- * Running routers
-    parse, unparse,
-    parse1, unparse1,
+  , parse, unparse
+  , parse1, unparse1
     
     -- * Constructing routers
     -- | The @constrN@ functions are helper functions to lift constructors of
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
-    constr0, constr1, constr2, constr3,
-    int, string, part, val, slash, lit,
-    opt, many, some, satisfy,
-    nil, cons, listP,
-    left, right, eitherP
+  , constr0, constr1, constr2, constr3
+  , int, string, part, val, slash, lit
+  , opt, many, some, duck, satisfy
+  , nilP, consP, listP
+  , leftP, rightP, eitherP
+  , nothingP, justP, maybeP
+  , pairP
   ) where
 
 import Prelude hiding ((.), id)
@@ -131,23 +133,44 @@ push h = Router
   (\(h' :- t) -> do guard (h == h'); return (t, ""))
   (\s -> return ((h :-), s))
 
-nil :: Router r ([a] :- r)
-nil = constr0 [] $ \x -> do [] <- x; Just ()
+duck :: Router r1 r2 -> Router (h :- r1) (h :- r2)
+duck r = Router
+  (\(h :- t) -> map (first (h :-)) $ ser r t)
+  (map (first (\f (h :- t) -> h :- f t)) . prs r)
 
-cons :: Router (a :- [a] :- r) ([a] :- r)
-cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
+
+nilP :: Router r ([a] :- r)
+nilP = constr0 [] $ \x -> do [] <- x; Just ()
+
+consP :: Router (a :- [a] :- r) ([a] :- r)
+consP = constr2 (:) $ \x -> do a:as <- x; return (a, as)
 
 listP :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
-listP r = many (cons . r) . nil
+listP r = many (consP . r) . nilP
 
-left :: Router (a :- r) (Either a b :- r)
-left = constr1 Left $ \x -> do Left a <- x; return a
 
-right :: Router (b :- r) (Either a b :- r)
-right = constr1 Right $ \x -> do Right b <- x; return b
+leftP :: Router (a :- r) (Either a b :- r)
+leftP = constr1 Left $ \x -> do Left a <- x; return a
+
+rightP :: Router (b :- r) (Either a b :- r)
+rightP = constr1 Right $ \x -> do Right b <- x; return b
 
 eitherP :: Router r (a :- r) -> Router r (b :- r) -> Router r (Either a b :- r)
-eitherP l r = left . l <> right . r
+eitherP l r = leftP . l <> rightP . r
+
+
+nothingP :: Router r (Maybe a :- r)
+nothingP = constr0 Nothing $ \x -> do Nothing <- x; Just ()
+
+justP :: Router (a :- r) (Maybe a :- r)
+justP = constr1 Just $ \x -> do Just a <- x; return a
+
+maybeP :: Router r (a :- r) -> Router r (Maybe a :- r)
+maybeP r = justP . r <> nothingP
+
+
+pairP :: Router (f :- s :- r) ((f, s) :- r)
+pairP = constr2 (,) id
 
 
 
