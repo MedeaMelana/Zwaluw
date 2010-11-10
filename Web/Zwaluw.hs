@@ -15,7 +15,7 @@ module Web.Zwaluw (
     -- second argument is a (partial) destructor.
   , constr0, constr1, constr2, constr3
   , int, string, part, val, slash, lit
-  , opt, many, some, duck, satisfy
+  , opt, many, some, chainr1, duck, satisfy
   , nilP, consP, listP
   , leftP, rightP, eitherP
   , nothingP, justP, maybeP
@@ -112,6 +112,16 @@ many = opt . some
 
 some :: Router r r -> Router r r
 some p = p . many p
+
+chainr1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> Router r (a :- r)
+chainr1 p op = many (p .~ op) . p
+
+apply :: Router ((b -> a) :- r) ((a -> b) :- r) -> Router (a :- r) (b :- r)
+apply r = Router
+  (\(b :- t) -> map (first (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
+  (\s -> map (first (\f (a :- r) -> let (g :- t) = f (const a :- r) in g a :- t)) $ prs r s)
+
+
 
 satisfy :: (Char -> Bool) -> Router r (Char :- r)
 satisfy p = Router
