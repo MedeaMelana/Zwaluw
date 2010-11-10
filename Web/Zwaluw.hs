@@ -27,6 +27,7 @@ import Control.Monad (mzero, mplus, guard)
 import Control.Category
 import Control.Arrow (first)
 import Data.Monoid
+import Data.Maybe (listToMaybe)
 
 infixr 8 <>
 infixr 8 :-
@@ -91,14 +92,14 @@ instance Monoid (Router a b) where
 parse :: Router () a -> String -> [a]
 parse p s = [ a () | (a, "") <- prs p s ]
 
-parse1 :: Router () (a :- ()) -> String -> [a]
-parse1 p = map hhead . parse p
+parse1 :: Router () (a :- ()) -> String -> Maybe a
+parse1 p = listToMaybe . map hhead . parse p
 
 unparse :: Router () a -> a -> [String]
 unparse p = map snd . ser p
 
-unparse1 :: Router () (a :- ()) -> a -> [String]
-unparse1 p x = unparse p (x :- ())
+unparse1 :: Router () (a :- ()) -> a -> Maybe String
+unparse1 p = listToMaybe . unparse p . (:- ())
 
 maph :: (b -> a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
 maph f g = xmap (\(h :- t) -> f h :- t) (\(h :- t) -> g h :- t)
