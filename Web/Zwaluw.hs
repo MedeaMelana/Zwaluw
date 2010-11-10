@@ -85,7 +85,7 @@ composeP op pf pg s = do
 instance Monoid (Router a b) where
   mempty = Router (const mzero) (const mzero)
   ~(Router sf pf) `mappend` ~(Router sg pg) = Router 
-    (\s -> sf s `mplus` sg s)
+    (\s -> sg s `mplus` sf s)
     (\s -> pf s `mplus` pg s)
 
 parse :: Router () a -> String -> [a]
