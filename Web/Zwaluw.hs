@@ -128,10 +128,10 @@ chainl1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :
 chainl1 p op = p .~ manyl (op . duck p)
 
 
--- apply :: Router ((b -> a) :- r) ((a -> b) :- r) -> Router (a :- r) (b :- r)
--- apply r = Router
---   (\(b :- t) -> map (first (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
---   (\s -> map (first (\f (a :- r) -> let (g :- t) = f (const a :- r) in g a :- t)) $ prs r s)
+apply :: Router ((b -> a) :- r) ((a -> b) :- r) -> Router (a :- r) (b :- r)
+apply r = Router
+  (\(b :- t) -> map (first (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
+  (\s -> map (first (\f (a :- r) -> maybe Nothing (\(g :- t) -> Just (g a :- t)) $ f (const a :- r))) $ prs r s)
 
 
 having :: Router r (a :- r) -> (a -> Bool) -> Router r (a :- r)
