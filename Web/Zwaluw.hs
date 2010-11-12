@@ -166,6 +166,13 @@ duck r = Router
   (\(h :- t) -> map (first (h :-)) $ ser r t)
   (map (first (\f (h :- t) -> h :- f t)) . prs r)
 
+printAs :: Router a b -> String -> Router a b
+printAs r s = Router
+  (\b -> case ser r b of
+           [] -> []
+           (a, _) : _ -> [(a, s)])
+  (prs r)
+
 
 nilP :: Router r ([a] :- r)
 nilP = constr0 [] $ \x -> do [] <- x; Just ()
