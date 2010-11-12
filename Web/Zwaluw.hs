@@ -28,7 +28,7 @@ module Web.Zwaluw (
 import Prelude hiding ((.), id)
 import Control.Monad (mzero, mplus, guard)
 import Control.Category
-import Control.Arrow (first)
+import Control.Arrow (first, second)
 import Data.Monoid
 import Data.Maybe (listToMaybe)
 import Data.Char (isDigit)
@@ -42,7 +42,7 @@ infixr 9 .~
 (<>) = mappend
 
 data Router a b = Router
-  { ser :: b -> [(a, String)]
+  { ser :: b -> [(String -> String, a)]
   , prs :: String -> [(a -> b, String)] }
 
 data a :- b = a :- b deriving (Eq, Show)
@@ -59,32 +59,22 @@ xmap f g (Router s p) = Router (maybe mzero s . f) ((fmap . fmap . first . fmap)
 instance Category Router where
   id = lit ""
   ~(Router sf pf) . ~(Router sg pg) = Router 
-    (composeS (++) sf sg) 
-    (composeP (.) pf pg)
+    (compose (.) sf sg) 
+    (compose (.) pf pg)
 
 (.~) :: Router a b -> Router b c -> Router a c
 ~(Router sf pf) .~ ~(Router sg pg) = Router 
-  (composeS (flip (++)) sg sf)
-  (composeP (flip (.)) pf pg)
+  (compose (flip (.)) sg sf)
+  (compose (flip (.)) pf pg)
 
-composeS 
-  :: (String -> String -> String)
-  -> (a -> [(b, String)]) 
-  -> (b -> [(c, String)]) 
-  -> (a -> [(c, String)])
-composeS op sf sg a = do
-  (b, s) <- sf a
-  (c, s') <- sg b
-  return (c, s `op` s')
-
-composeP
+compose
   :: (a -> b -> c)
-  -> (String -> [(a, String)])
-  -> (String -> [(b, String)])
-  -> (String -> [(c, String)])
-composeP op pf pg s = do
-  (f, s') <- pf s
-  (g, s'') <- pg s'
+  -> (i -> [(a, j)])
+  -> (j -> [(b, k)])
+  -> (i -> [(c, k)])
+compose op mf mg s = do
+  (f, s') <- mf s
+  (g, s'') <- mg s'
   return (f `op` g, s'')
 
 instance Monoid (Router a b) where
@@ -100,7 +90,7 @@ parse1 :: Router () (a :- ()) -> String -> Maybe a
 parse1 p = listToMaybe . map hhead . parse p
 
 unparse :: Router () a -> a -> [String]
-unparse p = map snd . ser p
+unparse p = map (($ "") . fst) . ser p
 
 unparse1 :: Router () (a :- ()) -> a -> Maybe String
 unparse1 p = listToMaybe . unparse p . (:- ())
@@ -132,7 +122,7 @@ chainl1 p op = p .~ manyl (op . duck p)
 
 apply :: Router ((b -> a) :- r) ((a -> b) :- r) -> Router (a :- r) (b :- r)
 apply r = Router
-  (\(b :- t) -> map (first (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
+  (\(b :- t) -> map (second (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
   (\s -> map (first (\f (a :- r) -> let (g :- t) = f (const a :- r) in g a :- t)) $ prs r s)
 
 
@@ -144,7 +134,7 @@ having r p = Router
 
 satisfy :: (Char -> Bool) -> Router r (Char :- r)
 satisfy p = Router
-  (\(c :- a) -> if (p c) then return (a, [c]) else mzero)
+  (\(c :- a) -> if (p c) then return ((c :), a) else mzero)
   (\s -> case s of 
     []     -> mzero
     (c:cs) -> if (p c) then return ((c :-), cs) else mzero)
@@ -157,19 +147,19 @@ digit = maph ((\a -> do [h] <- Just a; Just h) . show) (read . (:[])) $ satisfy 
 
 push :: Eq h => h -> Router r (h :- r)
 push h = Router 
-  (\(h' :- t) -> do guard (h == h'); return (t, ""))
+  (\(h' :- t) -> do guard (h == h'); return (id, t))
   (\s -> return ((h :-), s))
 
 duck :: Router r1 r2 -> Router (h :- r1) (h :- r2)
 duck r = Router
-  (\(h :- t) -> map (first (h :-)) $ ser r t)
+  (\(h :- t) -> map (second (h :-)) $ ser r t)
   (map (first (\f (h :- t) -> h :- f t)) . prs r)
 
 printAs :: Router a b -> String -> Router a b
 printAs r s = Router
   (\b -> case ser r b of
            [] -> []
-           (a, _) : _ -> [(a, s)])
+           (_, a) : _ -> [((s ++), a)])
   (prs r)
 
 
@@ -211,7 +201,7 @@ pairP = constr2 (,) id
 -- | Routes a constant string.
 lit :: String -> Router r r
 lit l = Router
-  (\b -> return (b, l))
+  (\b -> return ((l ++), b))
   (\s -> let (s1, s2) = splitAt (length l) s in if s1 == l then return (id, s2) else mzero)
 
 -- | Routes a slash.
@@ -225,7 +215,7 @@ int = val
 -- | Routes any string.
 string :: Router r (String :- r)
 string = Router
-  (\(s :- r) -> return (r, s))
+  (\(s :- r) -> return ((s ++), r))
   (\s -> return ((s :-), ""))
 
 -- | Routes part of a URL, i.e. a String not containing '/' or '?'.
@@ -235,7 +225,7 @@ part = listP (satisfy (\c -> c /= '/' && c /= '?'))
 -- | Routes any value that has a Show and Read instance.
 val :: (Show a, Read a) => Router r (a :- r)
 val = Router
-  (\(a :- r) -> return (r, show a))
+  (\(a :- r) -> return ((show a ++), r))
   (map (first (:-)) . reads)
 
 
@@ -246,7 +236,7 @@ val = Router
 -- > nil = constr0 [] $ \x -> do [] <- x; Just ()
 constr0 :: o -> (Maybe o -> Maybe ()) -> Router r (o :- r)
 constr0 c d = Router 
-  (\(a :- t) -> maybe mzero (\_ -> return (t, "")) (d (return a)))
+  (\(a :- t) -> maybe mzero (\_ -> return (id, t)) (d (return a)))
   (\s -> return ((c :-), s))
 
 -- | For example:
@@ -255,7 +245,7 @@ constr0 c d = Router
 -- > left = constr1 Left $ \x -> do Left a <- x; return a
 constr1 :: (a -> o) -> (Maybe o -> Maybe a) -> Router (a :- r) (o :- r)
 constr1 c d = Router
-  (\(a :- t) -> maybe mzero (\a -> return (a :- t, "")) (d (return a)))
+  (\(a :- t) -> maybe mzero (\a -> return (id, a :- t)) (d (return a)))
   (\s -> return (\(a :- t) -> c a :- t, s))
 
 -- | For example:
@@ -266,7 +256,7 @@ constr2 :: (a -> b -> o) -> (Maybe o -> Maybe (a, b)) ->
   Router (a :- b :- r) (o :- r)
 constr2 c d = Router
   (\(a :- t) ->
-    maybe mzero (\(a, b) -> return (a :- b :- t, "")) (d (return a)))
+    maybe mzero (\(a, b) -> return (id, a :- b :- t)) (d (return a)))
   (\s -> return (\(a :- b :- t) -> c a b :- t, s))
 
 -- | For example:
@@ -277,5 +267,5 @@ constr3 :: (a -> b -> c -> o) -> (Maybe o -> Maybe (a, b, c)) ->
   Router (a :- b :- c :- r) (o :- r)
 constr3 c d = Router
   (\(a :- t) ->
-    maybe mzero (\(a, b, c) -> return (a :- b :- c :- t, "")) (d (return a)))
+    maybe mzero (\(a, b, c) -> return (id, a :- b :- c :- t)) (d (return a)))
   (\s -> return (\(i :- j :- k :- t) -> c i j k :- t, s))
