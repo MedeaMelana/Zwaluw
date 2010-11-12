@@ -14,10 +14,11 @@ module Web.Zwaluw (
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
   , constr0, constr1, constr2, constr3
-  , int, string, part, val, slash, lit
-  , opt, duck, satisfy, having
+  , int, string, char, part, digit, val, slash, lit
+  , opt, duck, satisfy, having, printAs
   , manyr, somer, chainr1 
   , manyl, somel, chainl1
+  
   , nilP, consP, listP
   , leftP, rightP, eitherP
   , nothingP, justP, maybeP
@@ -30,6 +31,7 @@ import Control.Category
 import Control.Arrow (first)
 import Data.Monoid
 import Data.Maybe (listToMaybe)
+import Data.Char (isDigit)
 
 infixr 8 <>
 infixr 8 :-
@@ -51,8 +53,8 @@ hhead (a :- _) = a
 htail :: (a :- b) -> b
 htail (_ :- b) = b
 
-xmap :: (b -> a) -> (a -> b) -> Router r a -> Router r b
-xmap f g (Router s p) = Router (s . f) ((fmap . fmap . first . fmap) g p)
+xmap :: (b -> Maybe a) -> (a -> b) -> Router r a -> Router r b
+xmap f g (Router s p) = Router (maybe mzero s . f) ((fmap . fmap . first . fmap) g p)
   
 instance Category Router where
   id = lit ""
@@ -103,8 +105,8 @@ unparse p = map snd . ser p
 unparse1 :: Router () (a :- ()) -> a -> Maybe String
 unparse1 p = listToMaybe . unparse p . (:- ())
 
-maph :: (b -> a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
-maph f g = xmap (\(h :- t) -> f h :- t) (\(h :- t) -> g h :- t)
+maph :: (b -> Maybe a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
+maph f g = xmap (\(h :- t) -> maybe Nothing (Just . (:- t)) $ f h) (\(h :- t) -> g h :- t)
 
 opt :: Router r r -> Router r r
 opt = (<> id)
@@ -150,11 +152,8 @@ satisfy p = Router
 char :: Router r (Char :- r)
 char = satisfy (const True)
 
-digitChar :: Router r (Char :- r)
-digitChar = satisfy (\c -> c >= '0' && c <= '9')
-
 digit :: Router r (Int :- r)
-digit = maph (head . show) (read . (:[])) digitChar
+digit = maph ((\a -> do [h] <- Just a; Just h) . show) (read . (:[])) $ satisfy isDigit
 
 push :: Eq h => h -> Router r (h :- r)
 push h = Router 
