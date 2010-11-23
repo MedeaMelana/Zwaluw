@@ -1,5 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Web.Zwaluw (
     -- * Types
@@ -32,6 +34,7 @@ import Control.Arrow (first, second)
 import Data.Monoid
 import Data.Maybe (listToMaybe)
 import Data.Char (isDigit)
+import GHC.Exts
 
 infixr 8 <>
 infixr 8 :-
@@ -44,6 +47,9 @@ infixr 9 .~
 data Router a b = Router
   { ser :: b -> [(String -> String, a)]
   , prs :: String -> [(a -> b, String)] }
+
+instance a ~ b => IsString (Router a b) where
+  fromString = lit
 
 data a :- b = a :- b deriving (Eq, Show)
 
