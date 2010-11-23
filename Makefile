@@ -2,7 +2,7 @@ default:
 	ghci Example
 
 clean:
-	rm -rf dist
+	cabal clean
 
 configure:
 	cabal configure
