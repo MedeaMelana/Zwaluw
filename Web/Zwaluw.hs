@@ -15,7 +15,7 @@ module Web.Zwaluw (
     -- | The @constrN@ functions are helper functions to lift constructors of
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
-  , constr0, constr1, constr2, constr3
+  , pure, constr0, constr1, constr2, constr3
   , int, string, char, part, digit, val, (/), lit
   , opt, duck, satisfy, having, printAs
   , manyr, somer, chainr1 
@@ -276,3 +276,13 @@ constr3 c d = Router
   (\(a :- t) ->
     maybe mzero (\(a, b, c) -> return (id, a :- b :- c :- t)) (d (return a)))
   (\s -> return (\(i :- j :- k :- t) -> c i j k :- t, s))
+
+-- | Lift a constructor-destructor pair to a pure router.
+pure :: (a -> b) -> (b -> Maybe a) -> Router a b
+pure f g = Router g' f'
+  where
+    f' s = [(f, s)]
+    g' b =
+      case g b of
+        Nothing -> []
+        Just a  -> [(id, a)]

@@ -1,5 +1,5 @@
 default:
-	ghci Example
+	ghci -XOverloadedStrings -ddump-splices Example
 
 clean:
 	cabal clean
