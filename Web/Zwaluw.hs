@@ -27,7 +27,6 @@ module Web.Zwaluw (
   , pairP
   ) where
 
-import Prelude hiding ((.), id)
 import Prelude hiding ((.), id, (/))
 import Control.Monad (mzero, mplus, guard)
 import Control.Category
