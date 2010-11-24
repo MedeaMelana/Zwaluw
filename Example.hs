@@ -37,5 +37,5 @@ sitemap :: Router r (Sitemap :- r)
 sitemap = id /
   (  home
   <> "users" . (userOverview <> userDetail / int)
-  <> range / int / int
+  <> "range" . range / int / int
   )
