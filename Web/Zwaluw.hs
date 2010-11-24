@@ -16,7 +16,7 @@ module Web.Zwaluw (
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
   , constr0, constr1, constr2, constr3
-  , int, string, char, part, digit, val, slash, lit
+  , int, string, char, part, digit, val, (/), lit
   , opt, duck, satisfy, having, printAs
   , manyr, somer, chainr1 
   , manyl, somel, chainl1
@@ -210,9 +210,10 @@ lit l = Router
   (\b -> return ((l ++), b))
   (\s -> let (s1, s2) = splitAt (length l) s in if s1 == l then return (id, s2) else mzero)
 
--- | Routes a slash.
-slash :: Router r r
-slash = lit "/"
+-- | @p / q@ is equivalent to @p . "/" . q@.
+infixr 9 /
+(/) :: Router b c -> Router a b -> Router a c
+f / g = f . lit "/" . g
 
 -- | Routes any integer.
 int :: Router r (Int :- r)
