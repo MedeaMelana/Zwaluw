@@ -28,6 +28,7 @@ module Web.Zwaluw (
   ) where
 
 import Prelude hiding ((.), id)
+import Prelude hiding ((.), id, (/))
 import Control.Monad (mzero, mplus, guard)
 import Control.Category
 import Control.Arrow (first, second)
