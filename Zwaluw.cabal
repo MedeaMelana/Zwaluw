@@ -20,5 +20,5 @@ Build-type:     Simple
 
 
 Library
-  Exposed-Modules:  Web.Zwaluw
-  Build-Depends:    base >= 4 && < 5
+  Exposed-Modules:  Web.Zwaluw, Web.Zwaluw.TH
+  Build-Depends:    base >= 4 && < 5, template-haskell >= 2.4 && < 2.5
