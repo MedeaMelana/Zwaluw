@@ -30,21 +30,21 @@ infixr 9 .~
 
 
 data Router a b = Router
-  { ser :: b -> [(String -> String, a)]
-  , prs :: String -> [(a -> b, String)] }
+  { prs :: String -> [(a -> b, String)]
+  , ser :: b -> [(String -> String, a)] }
 
 instance Category Router where
   id = Router
     (\x -> [(id, x)])
     (\x -> [(id, x)])
-  ~(Router sf pf) . ~(Router sg pg) = Router 
-    (compose (.) sf sg) 
+  ~(Router pf sf) . ~(Router pg sg) = Router 
     (compose (.) pf pg)
+    (compose (.) sf sg) 
 
 (.~) :: Router a b -> Router b c -> Router a c
-~(Router sf pf) .~ ~(Router sg pg) = Router 
-  (compose (flip (.)) sg sf)
+~(Router pf sf) .~ ~(Router pg sg) = Router 
   (compose (flip (.)) pf pg)
+  (compose (flip (.)) sg sf)
 
 compose
   :: (a -> b -> c)
@@ -57,13 +57,15 @@ compose op mf mg s = do
   return (f `op` g, s'')
 
 instance Monoid (Router a b) where
-  mempty = Router (const mzero) (const mzero)
-  ~(Router sf pf) `mappend` ~(Router sg pg) = Router 
-    (\s -> sg s `mplus` sf s)
+  mempty = Router 
+    (const mzero)
+    (const mzero)
+  ~(Router pf sf) `mappend` ~(Router pg sg) = Router 
     (\s -> pf s `mplus` pg s)
+    (\s -> sg s `mplus` sf s)
 
 xmap :: (a -> b) -> (b -> Maybe a) -> Router r a -> Router r b
-xmap f g (Router s p) = Router (maybe mzero s . g) ((fmap . fmap . first . fmap) f p)
+xmap f g (Router p s) = Router ((fmap . fmap . first . fmap) f p) (maybe mzero s . g)
   
 -- | Lift a constructor-destructor pair to a pure router.
 pure :: (a -> b) -> (b -> Maybe a) -> Router a b
@@ -72,8 +74,8 @@ pure f g = xmap f g id
 -- | Routes a constant string.
 lit :: String -> Router r r
 lit l = Router
-  (\b -> return ((l ++), b))
   (\s -> let (s1, s2) = splitAt (length l) s in if s1 == l then return (id, s2) else mzero)
+  (\b -> return ((l ++), b))
 
 
 data a :- b = a :- b deriving (Eq, Show)

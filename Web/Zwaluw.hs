@@ -77,22 +77,22 @@ chainl1 p op = p .~ manyl (op . duck p)
 
 apply :: Router ((b -> a) :- r) ((a -> b) :- r) -> Router (a :- r) (b :- r)
 apply r = Router
-  (\(b :- t) -> map (second (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
   (\s -> map (first (\f (a :- r) -> let (g :- t) = f (const a :- r) in g a :- t)) $ prs r s)
+  (\(b :- t) -> map (second (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
 
 
 
 having :: (forall r. Router r (a :- r)) -> (a -> Bool) -> Router r (a :- r)
 having r p = Router
-  (\(a :- t) -> if (p a) then ser r (a :- t) else mzero)
   (\s -> map (first ((:-) . hhead . ($ ()))) $ filter (p . hhead . ($ ()) . fst) $ prs r s)
+  (\(a :- t) -> if (p a) then ser r (a :- t) else mzero)
 
 satisfy :: (Char -> Bool) -> Router r (Char :- r)
 satisfy p = Router
-  (\(c :- a) -> if (p c) then return ((c :), a) else mzero)
   (\s -> case s of 
     []     -> mzero
     (c:cs) -> if (p c) then return ((c :-), cs) else mzero)
+  (\(c :- a) -> if (p c) then return ((c :), a) else mzero)
 
 char :: Router r (Char :- r)
 char = satisfy (const True)
@@ -102,20 +102,20 @@ digit = maph ((\a -> do [h] <- Just a; Just h) . show) (read . (:[])) $ satisfy 
 
 push :: Eq h => h -> Router r (h :- r)
 push h = Router 
-  (\(h' :- t) -> do guard (h == h'); return (id, t))
   (\s -> return ((h :-), s))
+  (\(h' :- t) -> do guard (h == h'); return (id, t))
 
 duck :: Router r1 r2 -> Router (h :- r1) (h :- r2)
 duck r = Router
-  (\(h :- t) -> map (second (h :-)) $ ser r t)
   (map (first (\f (h :- t) -> h :- f t)) . prs r)
+  (\(h :- t) -> map (second (h :-)) $ ser r t)
 
 printAs :: Router a b -> String -> Router a b
 printAs r s = Router
+  (prs r)
   (\b -> case ser r b of
            [] -> []
            (_, a) : _ -> [((s ++), a)])
-  (prs r)
 
 
 rNil :: Router r ([a] :- r)
@@ -154,8 +154,8 @@ int = val
 -- | Routes any string.
 string :: Router r (String :- r)
 string = Router
-  (\(s :- r) -> return ((s ++), r))
   (\s -> return ((s :-), ""))
+  (\(s :- r) -> return ((s ++), r))
 
 -- | Routes part of a URL, i.e. a String not containing '/' or '?'.
 part :: Router r (String :- r)
@@ -164,5 +164,5 @@ part = rList (satisfy (\c -> c /= '/' && c /= '?'))
 -- | Routes any value that has a Show and Read instance.
 val :: (Show a, Read a) => Router r (a :- r)
 val = Router
-  (\(a :- r) -> return ((show a ++), r))
   (map (first (:-)) . reads)
+  (\(a :- r) -> return ((show a ++), r))
