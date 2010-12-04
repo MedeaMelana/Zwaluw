@@ -3,7 +3,7 @@
 
 module Web.Zwaluw.TH where
 
-import Web.Zwaluw
+import Web.Zwaluw.Core
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Control.Monad
@@ -47,9 +47,6 @@ deriveConstructor name arity = [| $(mk arity) $(conE name) |]
     mk :: Int -> ExpQ
     mk 0 = [| (:-) |]
     mk n = [| arg $(mk (n - 1)) |]
-
-arg :: (ty -> r -> s) -> (a -> ty) -> (a :- r) -> s
-arg c f (x :- r) = c (f x) r
 
 
 -- Derive the destructor part of a router.

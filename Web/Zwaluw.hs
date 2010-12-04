@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Web.Zwaluw (
     -- * Types
@@ -15,16 +16,16 @@ module Web.Zwaluw (
     -- | The @constrN@ functions are helper functions to lift constructors of
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
-  , pure, constr0, constr1, constr2, constr3
+  , pure, hdMap, hdTraverse
   , int, string, char, part, digit, val, (/), lit
   , opt, duck, satisfy, having, printAs
   , manyr, somer, chainr1 
   , manyl, somel, chainl1
   
-  , nilP, consP, listP
-  , leftP, rightP, eitherP
-  , nothingP, justP, maybeP
-  , pairP
+  , rNil, rCons, rList
+  , rPair
+  , rLeft, rRight, rEither
+  , rNothing, rJust, rMaybe
   ) where
 
 import Prelude hiding ((.), id, (/))
@@ -32,77 +33,25 @@ import Control.Monad (mzero, mplus, guard)
 import Control.Category
 import Control.Arrow (first, second)
 import Data.Monoid
-import Data.Maybe (listToMaybe)
 import Data.Char (isDigit)
 import GHC.Exts
 
+import Web.Zwaluw.Core
+import Web.Zwaluw.TH
+
+
 infixr 8 <>
-infixr 8 :-
-infixr 9 .~
 
 -- | Infix operator for 'mappend'.
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
 
-data Router a b = Router
-  { ser :: b -> [(String -> String, a)]
-  , prs :: String -> [(a -> b, String)] }
-
 instance a ~ b => IsString (Router a b) where
   fromString = lit
 
-data a :- b = a :- b deriving (Eq, Show)
-
-hhead :: (a :- b) -> a
-hhead (a :- _) = a
-
-htail :: (a :- b) -> b
-htail (_ :- b) = b
-
-xmap :: (b -> Maybe a) -> (a -> b) -> Router r a -> Router r b
-xmap f g (Router s p) = Router (maybe mzero s . f) ((fmap . fmap . first . fmap) g p)
-  
-instance Category Router where
-  id = lit ""
-  ~(Router sf pf) . ~(Router sg pg) = Router 
-    (compose (.) sf sg) 
-    (compose (.) pf pg)
-
-(.~) :: Router a b -> Router b c -> Router a c
-~(Router sf pf) .~ ~(Router sg pg) = Router 
-  (compose (flip (.)) sg sf)
-  (compose (flip (.)) pf pg)
-
-compose
-  :: (a -> b -> c)
-  -> (i -> [(a, j)])
-  -> (j -> [(b, k)])
-  -> (i -> [(c, k)])
-compose op mf mg s = do
-  (f, s') <- mf s
-  (g, s'') <- mg s'
-  return (f `op` g, s'')
-
-instance Monoid (Router a b) where
-  mempty = Router (const mzero) (const mzero)
-  ~(Router sf pf) `mappend` ~(Router sg pg) = Router 
-    (\s -> sg s `mplus` sf s)
-    (\s -> pf s `mplus` pg s)
-
-parse :: Router () a -> String -> [a]
-parse p s = [ a () | (a, "") <- prs p s ]
-
-parse1 :: Router () (a :- ()) -> String -> Maybe a
-parse1 p = listToMaybe . map hhead . parse p
-
-unparse :: Router () a -> a -> [String]
-unparse p = map (($ "") . fst) . ser p
-
-unparse1 :: Router () (a :- ()) -> a -> Maybe String
-unparse1 p = listToMaybe . unparse p . (:- ())
 
 maph :: (b -> Maybe a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
-maph f g = xmap (\(h :- t) -> maybe Nothing (Just . (:- t)) $ f h) (\(h :- t) -> g h :- t)
+maph f g = xmap (\(h :- t) -> g h :- t) (\(h :- t) -> maybe Nothing (Just . (:- t)) $ f h)
 
 opt :: Router r r -> Router r r
 opt = (<> id)
@@ -169,46 +118,29 @@ printAs r s = Router
   (prs r)
 
 
-nilP :: Router r ([a] :- r)
-nilP = constr0 [] $ \x -> do [] <- x; Just ()
+rNil :: Router r ([a] :- r)
+rNil = pure ([] :-) $ \(xs :- t) -> do [] <- Just xs; Just t
 
-consP :: Router (a :- [a] :- r) ([a] :- r)
-consP = constr2 (:) $ \x -> do a:as <- x; return (a, as)
+rCons :: Router (a :- [a] :- r) ([a] :- r)
+rCons = pure (arg (arg (:-)) (:)) $ \(xs :- t) -> do a:as <- Just xs; Just (a :- as :- t)
 
-listP :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
-listP r = manyr (consP . r) . nilP
+rList :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
+rList r = manyr (rCons . r) . rNil
 
+rPair :: Router (f :- s :- r) ((f, s) :- r)
+rPair = pure (arg (arg (:-)) (,)) $ \(ab :- t) -> do (a,b) <- Just ab; Just (a :- b :- t)
 
-leftP :: Router (a :- r) (Either a b :- r)
-leftP = constr1 Left $ \x -> do Left a <- x; return a
+$(deriveRouters ''Either)
 
-rightP :: Router (b :- r) (Either a b :- r)
-rightP = constr1 Right $ \x -> do Right b <- x; return b
+rEither :: Router r (a :- r) -> Router r (b :- r) -> Router r (Either a b :- r)
+rEither l r = rLeft . l <> rRight . r
 
-eitherP :: Router r (a :- r) -> Router r (b :- r) -> Router r (Either a b :- r)
-eitherP l r = leftP . l <> rightP . r
+$(deriveRouters ''Maybe)
 
-
-nothingP :: Router r (Maybe a :- r)
-nothingP = constr0 Nothing $ \x -> do Nothing <- x; Just ()
-
-justP :: Router (a :- r) (Maybe a :- r)
-justP = constr1 Just $ \x -> do Just a <- x; return a
-
-maybeP :: Router r (a :- r) -> Router r (Maybe a :- r)
-maybeP r = justP . r <> nothingP
+rMaybe :: Router r (a :- r) -> Router r (Maybe a :- r)
+rMaybe r = rJust . r <> rNothing
 
 
-pairP :: Router (f :- s :- r) ((f, s) :- r)
-pairP = constr2 (,) id
-
-
-
--- | Routes a constant string.
-lit :: String -> Router r r
-lit l = Router
-  (\b -> return ((l ++), b))
-  (\s -> let (s1, s2) = splitAt (length l) s in if s1 == l then return (id, s2) else mzero)
 
 -- | @p / q@ is equivalent to @p . "/" . q@.
 infixr 9 /
@@ -227,62 +159,10 @@ string = Router
 
 -- | Routes part of a URL, i.e. a String not containing '/' or '?'.
 part :: Router r (String :- r)
-part = listP (satisfy (\c -> c /= '/' && c /= '?'))
+part = rList (satisfy (\c -> c /= '/' && c /= '?'))
 
 -- | Routes any value that has a Show and Read instance.
 val :: (Show a, Read a) => Router r (a :- r)
 val = Router
   (\(a :- r) -> return ((show a ++), r))
   (map (first (:-)) . reads)
-
-
-
--- | For example:
--- 
--- > nil :: Router r ([a] :- r)
--- > nil = constr0 [] $ \x -> do [] <- x; Just ()
-constr0 :: o -> (Maybe o -> Maybe ()) -> Router r (o :- r)
-constr0 c d = Router 
-  (\(a :- t) -> maybe mzero (\_ -> return (id, t)) (d (return a)))
-  (\s -> return ((c :-), s))
-
--- | For example:
---
--- > left :: Router (a :- r) (Either a b :- r)
--- > left = constr1 Left $ \x -> do Left a <- x; return a
-constr1 :: (a -> o) -> (Maybe o -> Maybe a) -> Router (a :- r) (o :- r)
-constr1 c d = Router
-  (\(a :- t) -> maybe mzero (\a -> return (id, a :- t)) (d (return a)))
-  (\s -> return (\(a :- t) -> c a :- t, s))
-
--- | For example:
---
--- > cons :: Router (a :- [a] :- r) ([a] :- r)
--- > cons = constr2 (:) $ \x -> do a:as <- x; return (a, as)
-constr2 :: (a -> b -> o) -> (Maybe o -> Maybe (a, b)) ->
-  Router (a :- b :- r) (o :- r)
-constr2 c d = Router
-  (\(a :- t) ->
-    maybe mzero (\(a, b) -> return (id, a :- b :- t)) (d (return a)))
-  (\s -> return (\(a :- b :- t) -> c a b :- t, s))
-
--- | For example:
---
--- > ifte :: Router (Bool :- Expr :- Expr :- r) (Expr :- r)
--- > ifte = constr3 IfThenElse $ \x -> do IfThenElse b t e <- x; return (b, t, e)
-constr3 :: (a -> b -> c -> o) -> (Maybe o -> Maybe (a, b, c)) ->
-  Router (a :- b :- c :- r) (o :- r)
-constr3 c d = Router
-  (\(a :- t) ->
-    maybe mzero (\(a, b, c) -> return (id, a :- b :- c :- t)) (d (return a)))
-  (\s -> return (\(i :- j :- k :- t) -> c i j k :- t, s))
-
--- | Lift a constructor-destructor pair to a pure router.
-pure :: (a -> b) -> (b -> Maybe a) -> Router a b
-pure f g = Router g' f'
-  where
-    f' s = [(f, s)]
-    g' b =
-      case g b of
-        Nothing -> []
-        Just a  -> [(id, a)]

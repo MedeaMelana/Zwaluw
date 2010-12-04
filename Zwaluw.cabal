@@ -1,5 +1,5 @@
 Name:           Zwaluw
-Version:        0.1
+Version:        0.2
 Synopsis:       Combinators for bidirectional URL routing
 Description:   	Combinators for bidirectional URL routing
 
@@ -20,5 +20,8 @@ Build-type:     Simple
 
 
 Library
-  Exposed-Modules:  Web.Zwaluw, Web.Zwaluw.TH
-  Build-Depends:    base >= 4 && < 5, template-haskell >= 2.4 && < 2.5
+  Exposed-Modules:  Web.Zwaluw, 
+                    Web.Zwaluw.Core, 
+                    Web.Zwaluw.TH, 
+                    Web.Zwaluw.Regular
+  Build-Depends:    base >= 4 && < 5, template-haskell >= 2.4 && < 2.6
