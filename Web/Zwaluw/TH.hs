@@ -76,7 +76,7 @@ deriveDestructor name tys = do
 
 -- Derive the name of a router based on the name of the constructor in question.
 mkRouterName :: Name -> Name
-mkRouterName name = mkName ("r" ++ nameBase name)
+mkRouterName name = mkName ('r' : nameBase name)
 
 
 -- Retrieve the name of a constructor.

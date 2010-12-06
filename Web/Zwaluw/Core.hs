@@ -12,7 +12,8 @@ module Web.Zwaluw.Core (
   , parse1, unparse1
     
   , xmap, pure, lit
-  , hhead, htail, hdMap, hdTraverse, arg
+  , hhead, htail, hdMap, hdTraverse, pop, arg
+  , val, duck, printAs
   ) where
 
 import Prelude hiding ((.), id, (/))
@@ -20,7 +21,7 @@ import Control.Category
 import Data.Monoid
 
 import Control.Monad (mzero, mplus)
-import Control.Arrow (first)
+import Control.Arrow (first, second)
 import Data.Maybe (listToMaybe)
 
 
@@ -86,16 +87,35 @@ hhead (a :- _) = a
 htail :: (a :- b) -> b
 htail (_ :- b) = b
 
-hdMap :: (a1 -> a2) -> (a1 :- b) -> (a2 :- b)
-hdMap f (a :- b) = f a :- b
+pop :: (a -> b -> r) -> (a :- b) -> r
+pop f (a :- b) = f a b
 
 hdTraverse :: Functor f => (a -> f b) -> a :- t -> f (b :- t)
 hdTraverse f (a :- t) = fmap (:- t) (f a)
 
 arg :: (ty -> r -> s) -> (a -> ty) -> (a :- r) -> s
-arg c f (x :- r) = c (f x) r
+arg c f = pop (c . f)
+
+hdMap :: (a1 -> a2) -> (a1 :- b) -> (a2 :- b)
+hdMap = arg (:-)
 
 
+val :: (String -> [(a, String)]) -> (a -> [String -> String]) -> Router r (a :- r)
+val rs ss = Router
+  (map (first (:-)) . rs)
+  (\(a :- r) -> map (\f -> (f, r)) (ss a))
+
+duck :: Router r1 r2 -> Router (h :- r1) (h :- r2)
+duck r = Router
+  (map (first (\f (h :- t) -> h :- f t)) . prs r)
+  (\(h :- t) -> map (second (h :-)) $ ser r t)
+
+printAs :: Router a b -> String -> Router a b
+printAs r s = Router
+  (prs r)
+  (\b -> case ser r b of
+           [] -> []
+           (_, a) : _ -> [((s ++), a)])
 
 
 parse :: Router () a -> String -> [a]

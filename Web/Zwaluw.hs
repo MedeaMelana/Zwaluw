@@ -17,7 +17,7 @@ module Web.Zwaluw (
     -- datatypes to routers. Their first argument is the constructor; their
     -- second argument is a (partial) destructor.
   , pure, hdMap, hdTraverse
-  , int, string, char, part, digit, val, (/), lit
+  , int, string, char, part, digit, val, readshow, (/), lit
   , opt, duck, satisfy, having, printAs
   , manyr, somer, chainr1 
   , manyl, somel, chainl1
@@ -75,47 +75,22 @@ chainl1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :
 chainl1 p op = p .~ manyl (op . duck p)
 
 
-apply :: Router ((b -> a) :- r) ((a -> b) :- r) -> Router (a :- r) (b :- r)
-apply r = Router
-  (\s -> map (first (\f (a :- r) -> let (g :- t) = f (const a :- r) in g a :- t)) $ prs r s)
-  (\(b :- t) -> map (second (\(f :- r) -> f b :- r)) $ ser r (const b :- t))
-
-
 
 having :: (forall r. Router r (a :- r)) -> (a -> Bool) -> Router r (a :- r)
-having r p = Router
-  (\s -> map (first ((:-) . hhead . ($ ()))) $ filter (p . hhead . ($ ()) . fst) $ prs r s)
-  (\(a :- t) -> if (p a) then ser r (a :- t) else mzero)
+having r p = val
+  (filter (p . fst) . map (first (hhead . ($ ()))) . prs r)
+  (\a -> if p a then map fst (ser r (a :- ())) else [])
 
 satisfy :: (Char -> Bool) -> Router r (Char :- r)
-satisfy p = Router
-  (\s -> case s of 
-    []     -> mzero
-    (c:cs) -> if (p c) then return ((c :-), cs) else mzero)
-  (\(c :- a) -> if (p c) then return ((c :), a) else mzero)
+satisfy p = val
+  (\s -> [(c, cs) | c:cs <- [s], p c])
+  (\c -> [(c :) | p c])
 
 char :: Router r (Char :- r)
 char = satisfy (const True)
 
 digit :: Router r (Int :- r)
 digit = maph ((\a -> do [h] <- Just a; Just h) . show) (read . (:[])) $ satisfy isDigit
-
-push :: Eq h => h -> Router r (h :- r)
-push h = Router 
-  (\s -> return ((h :-), s))
-  (\(h' :- t) -> do guard (h == h'); return (id, t))
-
-duck :: Router r1 r2 -> Router (h :- r1) (h :- r2)
-duck r = Router
-  (map (first (\f (h :- t) -> h :- f t)) . prs r)
-  (\(h :- t) -> map (second (h :-)) $ ser r t)
-
-printAs :: Router a b -> String -> Router a b
-printAs r s = Router
-  (prs r)
-  (\b -> case ser r b of
-           [] -> []
-           (_, a) : _ -> [((s ++), a)])
 
 
 rNil :: Router r ([a] :- r)
@@ -149,20 +124,16 @@ f / g = f . lit "/" . g
 
 -- | Routes any integer.
 int :: Router r (Int :- r)
-int = val
+int = readshow
 
 -- | Routes any string.
 string :: Router r (String :- r)
-string = Router
-  (\s -> return ((s :-), ""))
-  (\(s :- r) -> return ((s ++), r))
+string = val (\s -> [(s, "")]) (return . (++))
 
 -- | Routes part of a URL, i.e. a String not containing '/' or '?'.
 part :: Router r (String :- r)
 part = rList (satisfy (\c -> c /= '/' && c /= '?'))
 
 -- | Routes any value that has a Show and Read instance.
-val :: (Show a, Read a) => Router r (a :- r)
-val = Router
-  (map (first (:-)) . reads)
-  (\(a :- r) -> return ((show a ++), r))
+readshow :: (Show a, Read a) => Router r (a :- r)
+readshow = val reads (return . shows)

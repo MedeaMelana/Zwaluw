@@ -13,7 +13,7 @@ import Generics.Regular
 infixr :&
 
 
-type Routers r = RouterList (PF r) r
+type Routers = RouterList (PF r)
 
 mkRouters :: (f ~ PF r, MkRouters f r, Regular r) => Routers r
 mkRouters = mkRouters' to (Just . from)
