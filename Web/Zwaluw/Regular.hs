@@ -32,12 +32,12 @@ instance (MkRouters f r, MkRouters g r) => MkRouters (f :+: g) r where
                           :& mkRouters' (addLR . R) (matchR matchLR)
     where
       matchL :: (r -> Maybe ((f :+: g) r)) -> r -> Maybe (f r)
-      matchL frm r = case (frm r) of 
+      matchL frm r = case frm r of 
         Just (L f) -> Just f
         _ -> Nothing
 
       matchR :: (r -> Maybe ((f :+: g) r)) -> r -> Maybe (g r)
-      matchR frm r = case (frm r) of 
+      matchR frm r = case frm r of 
         Just (R f) -> Just f
         _ -> Nothing
 
