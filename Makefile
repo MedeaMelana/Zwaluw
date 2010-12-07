@@ -1,5 +1,11 @@
 default:
-	ghci -XOverloadedStrings Example
+	# Use either "make th" or "make regular"
+
+th:
+	ghci -XOverloadedStrings ExampleTH
+
+regular:
+	ghci -XOverloadedStrings ExampleRegular
 
 clean:
 	cabal clean
