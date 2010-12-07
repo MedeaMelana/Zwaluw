@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE EmptyDataDecls #-}
 
 import Web.Zwaluw
 import Web.Zwaluw.Regular
