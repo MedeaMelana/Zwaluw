@@ -24,4 +24,4 @@ Library
                     Web.Zwaluw.Core, 
                     Web.Zwaluw.TH, 
                     Web.Zwaluw.Regular
-  Build-Depends:    base >= 4 && < 5, template-haskell >= 2.4 && < 2.6
+  Build-Depends:    base >= 4 && < 5, template-haskell >= 2.4 && < 2.6, regular >= 0.3 && < 0.4
