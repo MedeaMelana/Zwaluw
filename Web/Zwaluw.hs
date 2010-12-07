@@ -13,9 +13,6 @@ module Web.Zwaluw (
   , parse1, unparse1
     
     -- * Constructing routers
-    -- | The @constrN@ functions are helper functions to lift constructors of
-    -- datatypes to routers. Their first argument is the constructor; their
-    -- second argument is a (partial) destructor.
   , pure, hdMap, hdTraverse
   , int, string, char, part, digit, val, readshow, (/), lit
   , opt, duck, satisfy, having, printAs
