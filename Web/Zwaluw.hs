@@ -13,11 +13,13 @@ module Web.Zwaluw (
   , parse1, unparse1
     
     -- * Constructing routers
-  , pure, hdMap, hdTraverse
-  , int, string, char, part, digit, val, readshow, (/), lit
-  , opt, duck, satisfy, having, printAs
+  , pure, xmap, xmaph
+  , val, readshow, lit
+  , opt, duck, satisfy, rFilter, printAs
   , manyr, somer, chainr1 
   , manyl, somel, chainl1
+  , int, string, char, digit, hexDigit
+  , (/), part
   
   , rNil, rCons, rList
   , rPair
@@ -26,12 +28,10 @@ module Web.Zwaluw (
   ) where
 
 import Prelude hiding ((.), id, (/))
-import Control.Monad (mzero, mplus, guard)
+import Control.Monad (guard)
 import Control.Category
-import Control.Arrow (first, second)
 import Data.Monoid
-import Data.Char (isDigit)
-import GHC.Exts
+import Data.Char (isDigit, isHexDigit, intToDigit, digitToInt)
 
 import Web.Zwaluw.Core
 import Web.Zwaluw.TH
@@ -43,12 +43,6 @@ infixr 8 <>
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
 
-instance a ~ b => IsString (Router a b) where
-  fromString = lit
-
-
-maph :: (b -> Maybe a) -> (a -> b) -> Router i (a :- o) -> Router i (b :- o)
-maph f g = xmap (\(h :- t) -> g h :- t) (\(h :- t) -> maybe Nothing (Just . (:- t)) $ f h)
 
 opt :: Router r r -> Router r r
 opt = (<> id)
@@ -59,7 +53,7 @@ manyr = opt . somer
 somer :: Router r r -> Router r r
 somer p = p . manyr p
 
-chainr1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> Router r (a :- r)
+chainr1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> forall r. Router r (a :- r)
 chainr1 p op = manyr (p .~ op) . p
 
 manyl :: Router r r -> Router r r
@@ -68,26 +62,56 @@ manyl = opt . somel
 somel :: Router r r -> Router r r
 somel p = p .~ manyl p
 
-chainl1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> Router r (a :- r)
+chainl1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> forall r. Router r (a :- r)
 chainl1 p op = p .~ manyl (op . duck p)
 
+-- | Filtering on routers.
+rFilter :: (a -> Bool) -> Router () (a :- ()) -> Router r (a :- r)
+rFilter p r = val
+  (\s -> [ (a, s') | (f, s') <- prs r s, let a = hhead (f ()), p a ])
+  (\a -> [ f | p a, (f, _) <- ser r (a :- ()) ])
 
 
-having :: (forall r. Router r (a :- r)) -> (a -> Bool) -> Router r (a :- r)
-having r p = val
-  (filter (p . fst) . map (first (hhead . ($ ()))) . prs r)
-  (\a -> if p a then map fst (ser r (a :- ())) else [])
 
+-- | Routes any value that has a Show and Read instance.
+readshow :: (Show a, Read a) => Router r (a :- r)
+readshow = val reads (return . shows)
+
+-- | Routes any integer.
+int :: Router r (Int :- r)
+int = readshow
+
+-- | Routes any string.
+string :: Router r (String :- r)
+string = val (\s -> [(s, "")]) (return . (++))
+
+-- | Routes one character satisfying the given predicate.
 satisfy :: (Char -> Bool) -> Router r (Char :- r)
 satisfy p = val
-  (\s -> [(c, cs) | c:cs <- [s], p c])
-  (\c -> [(c :) | p c])
+  (\s -> [ (c, cs) | c:cs <- [s], p c ])
+  (\c -> [ (c :) | p c ])
 
+-- | Routes one character.
 char :: Router r (Char :- r)
 char = satisfy (const True)
 
+-- | Routes one decimal digit.
 digit :: Router r (Int :- r)
-digit = maph ((\a -> do [h] <- Just a; Just h) . show) (read . (:[])) $ satisfy isDigit
+digit = xmaph digitToInt (\i -> guard (i >= 0 && i < 10) >> Just (intToDigit i)) (satisfy isDigit)
+
+-- | Routes one hexadecimal digit.
+hexDigit :: Router r (Int :- r)
+hexDigit = xmaph digitToInt (\i -> guard (i >= 0 && i < 16) >> Just (intToDigit i)) (satisfy isHexDigit)
+
+-- | @p / q@ is equivalent to @p . "/" . q@.
+infixr 9 /
+(/) :: Router b c -> Router a b -> Router a c
+f / g = f . lit "/" . g
+
+-- | Routes part of a URL, i.e. a String not containing '/' or '?'.
+part :: Router r (String :- r)
+part = rList (satisfy (\c -> c /= '/' && c /= '?'))
+
 
 
 rNil :: Router r ([a] :- r)
@@ -96,7 +120,7 @@ rNil = pure ([] :-) $ \(xs :- t) -> do [] <- Just xs; Just t
 rCons :: Router (a :- [a] :- r) ([a] :- r)
 rCons = pure (arg (arg (:-)) (:)) $ \(xs :- t) -> do a:as <- Just xs; Just (a :- as :- t)
 
-rList :: (forall r. Router r (a :- r)) -> Router r ([a] :- r)
+rList :: (forall r. Router r (a :- r)) -> forall r. Router r ([a] :- r)
 rList r = manyr (rCons . r) . rNil
 
 rPair :: Router (f :- s :- r) ((f, s) :- r)
@@ -111,26 +135,3 @@ $(deriveRouters ''Maybe)
 
 rMaybe :: Router r (a :- r) -> Router r (Maybe a :- r)
 rMaybe r = rJust . r <> rNothing
-
-
-
--- | @p / q@ is equivalent to @p . "/" . q@.
-infixr 9 /
-(/) :: Router b c -> Router a b -> Router a c
-f / g = f . lit "/" . g
-
--- | Routes any integer.
-int :: Router r (Int :- r)
-int = readshow
-
--- | Routes any string.
-string :: Router r (String :- r)
-string = val (\s -> [(s, "")]) (return . (++))
-
--- | Routes part of a URL, i.e. a String not containing '/' or '?'.
-part :: Router r (String :- r)
-part = rList (satisfy (\c -> c /= '/' && c /= '?'))
-
--- | Routes any value that has a Show and Read instance.
-readshow :: (Show a, Read a) => Router r (a :- r)
-readshow = val reads (return . shows)

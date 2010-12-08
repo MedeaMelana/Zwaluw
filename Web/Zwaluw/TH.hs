@@ -5,7 +5,6 @@ module Web.Zwaluw.TH where
 
 import Web.Zwaluw.Core
 import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
 import Control.Monad
 
 
@@ -35,9 +34,9 @@ deriveRouter con =
     go name tys = do
       let name' = mkRouterName name
       runIO $ putStrLn $ "Introducing router " ++ nameBase name' ++ "."
-      exp <- [| pure $(deriveConstructor name (length tys))
+      expr <- [| pure $(deriveConstructor name (length tys))
                      $(deriveDestructor name tys) |]
-      return [FunD name' [Clause [] (NormalB exp) []]]
+      return [FunD name' [Clause [] (NormalB expr) []]]
 
 
 -- Derive the contructor part of a router.
@@ -86,4 +85,4 @@ conName con =
     NormalC name _  -> name
     RecC name _     -> name
     InfixC _ name _ -> name
-    ForallC _ _ con -> conName con
+    ForallC _ _ con' -> conName con'

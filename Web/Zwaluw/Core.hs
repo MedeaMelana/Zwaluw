@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -11,7 +10,7 @@ module Web.Zwaluw.Core (
   , parse, unparse
   , parse1, unparse1
     
-  , xmap, pure, lit
+  , xmap, pure, lit, xmaph
   , hhead, htail, hdMap, hdTraverse, pop, arg
   , val, duck, printAs
   ) where
@@ -23,6 +22,7 @@ import Data.Monoid
 import Control.Monad (mzero, mplus)
 import Control.Arrow (first, second)
 import Data.Maybe (listToMaybe)
+import GHC.Exts
 
 
 infixr 8 :-
@@ -65,9 +65,14 @@ instance Monoid (Router a b) where
     (\s -> pf s `mplus` pg s)
     (\s -> sg s `mplus` sf s)
 
+instance a ~ b => IsString (Router a b) where
+  fromString = lit
+
+
+-- | Map over routers.
 xmap :: (a -> b) -> (b -> Maybe a) -> Router r a -> Router r b
 xmap f g (Router p s) = Router ((fmap . fmap . first . fmap) f p) (maybe mzero s . g)
-  
+
 -- | Lift a constructor-destructor pair to a pure router.
 pure :: (a -> b) -> (b -> Maybe a) -> Router a b
 pure f g = xmap f g id
@@ -79,43 +84,53 @@ lit l = Router
   (\b -> return ((l ++), b))
 
 
+-- | A stack datatype. Just a better looking tuple.
 data a :- b = a :- b deriving (Eq, Show)
 
-hhead :: (a :- b) -> a
-hhead (a :- _) = a
-
-htail :: (a :- b) -> b
-htail (_ :- b) = b
-
+-- | Stack destructor.
 pop :: (a -> b -> r) -> (a :- b) -> r
 pop f (a :- b) = f a b
 
+-- | Get the top of the stack.
+hhead :: (a :- b) -> a
+hhead (a :- _) = a
+
+-- | Get the stack with the top popped.
+htail :: (a :- b) -> b
+htail (_ :- b) = b
+
+-- | Applicative traversal over the top of the stack.
 hdTraverse :: Functor f => (a -> f b) -> a :- t -> f (b :- t)
 hdTraverse f (a :- t) = fmap (:- t) (f a)
 
 arg :: (ty -> r -> s) -> (a -> ty) -> (a :- r) -> s
 arg c f = pop (c . f)
 
+-- | Map over the top of the stack.
 hdMap :: (a1 -> a2) -> (a1 :- b) -> (a2 :- b)
 hdMap = arg (:-)
 
+-- | Like "xmap", but only maps over the top of the stack.
+xmaph :: (a -> b) -> (b -> Maybe a) -> Router i (a :- o) -> Router i (b :- o)
+xmaph f g = xmap (hdMap f) (hdTraverse g)
 
+
+-- | Build a router for a value given all the ways to parse and serialize it.
 val :: (String -> [(a, String)]) -> (a -> [String -> String]) -> Router r (a :- r)
 val rs ss = Router
   (map (first (:-)) . rs)
   (\(a :- r) -> map (\f -> (f, r)) (ss a))
 
+-- | Convert a router to do what it does on the tail of the stack.
 duck :: Router r1 r2 -> Router (h :- r1) (h :- r2)
 duck r = Router
   (map (first (\f (h :- t) -> h :- f t)) . prs r)
   (\(h :- t) -> map (second (h :-)) $ ser r t)
 
+-- | @r `printAs` s@ uses ther serializer of @r@ to test if serializing succeeds,
+--   and if it does, instead serializes as @s@. 
 printAs :: Router a b -> String -> Router a b
-printAs r s = Router
-  (prs r)
-  (\b -> case ser r b of
-           [] -> []
-           (_, a) : _ -> [((s ++), a)])
+printAs r s = r { ser = map (first (const (s ++))) . take 1 . ser r }
 
 
 parse :: Router () a -> String -> [a]

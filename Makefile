@@ -2,10 +2,10 @@ default:
 	# Use either "make th" or "make regular"
 
 th:
-	ghci -XOverloadedStrings ExampleTH
+	ghci -XOverloadedStrings -Wall ExampleTH
 
 regular:
-	ghci -XOverloadedStrings ExampleRegular
+	ghci -XOverloadedStrings -Wall ExampleRegular
 
 clean:
 	cabal clean
