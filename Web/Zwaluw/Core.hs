@@ -63,7 +63,7 @@ instance Monoid (Router a b) where
     (const mzero)
   ~(Router pf sf) `mappend` ~(Router pg sg) = Router 
     (\s -> pf s `mplus` pg s)
-    (\s -> sg s `mplus` sf s)
+    (\s -> sf s `mplus` sg s)
 
 instance a ~ b => IsString (Router a b) where
   fromString = lit

@@ -45,7 +45,7 @@ infixr 8 <>
 
 
 opt :: Router r r -> Router r r
-opt = (<> id)
+opt = (id <>)
 
 manyr :: Router r r -> Router r r
 manyr = opt . somer
