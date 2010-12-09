@@ -29,7 +29,8 @@ infixr 8 :-
 infixr 9 .~
 
 
-
+-- | A @Router a b@ takes an @a@ to parse a URL and results in @b@ if parsing succeeds.
+--   And it takes a @b@ to serialize to a URL and results in @a@ if serializing succeeds.
 data Router a b = Router
   { prs :: String -> [(a -> b, String)]
   , ser :: b -> [(String -> String, a)] }
@@ -42,6 +43,7 @@ instance Category Router where
     (compose (.) pf pg)
     (compose (.) sf sg) 
 
+-- | Reverse composition, but with the side effects still in left-to-right order.
 (.~) :: Router a b -> Router b c -> Router a c
 ~(Router pf sf) .~ ~(Router pg sg) = Router 
   (compose (flip (.)) pf pg)
@@ -127,20 +129,24 @@ duck r = Router
   (map (first (\f (h :- t) -> h :- f t)) . prs r)
   (\(h :- t) -> map (second (h :-)) $ ser r t)
 
--- | @r `printAs` s@ uses ther serializer of @r@ to test if serializing succeeds,
+-- | @r \`printAs\` s@ uses ther serializer of @r@ to test if serializing succeeds,
 --   and if it does, instead serializes as @s@. 
 printAs :: Router a b -> String -> Router a b
 printAs r s = r { ser = map (first (const (s ++))) . take 1 . ser r }
 
 
+-- | Give all possible parses.
 parse :: Router () a -> String -> [a]
 parse p s = [ a () | (a, "") <- prs p s ]
 
+-- | Give the first parse, for Routers with a parser that yields just one value.
 parse1 :: Router () (a :- ()) -> String -> Maybe a
 parse1 p = listToMaybe . map hhead . parse p
 
+-- | Give all possible serializations.
 unparse :: Router () a -> a -> [String]
 unparse p = map (($ "") . fst) . ser p
 
+-- | Give the first serialization, for Routers with a serializer that needs just one value.
 unparse1 :: Router () (a :- ()) -> a -> Maybe String
 unparse1 p = listToMaybe . unparse p . (:- ())

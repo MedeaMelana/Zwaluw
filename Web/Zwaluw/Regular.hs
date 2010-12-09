@@ -4,7 +4,15 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Web.Zwaluw.Regular (mkRouters, Routers, RouterList(..), deriveAll, PF) where
+module Web.Zwaluw.Regular 
+  ( mkRouters
+  , Routers
+  , RouterList(..)
+  
+  -- * Re-exported from Generics.Regular
+  , deriveAll
+  , PF
+  ) where
 
 import Web.Zwaluw.Core
 import Generics.Regular
@@ -12,8 +20,12 @@ import Generics.Regular
 infixr :&
 
 
+-- | The type of the list of routers generated for type @r@.
 type Routers r = RouterList (PF r) r
 
+-- | Creates the routers for type @r@, one for each constructor. For example:
+--
+--   @Z rHome :& Z rUserOverview :& Z rUserDetail :& Z rArticle = mkRouters@
 mkRouters :: (MkRouters (PF r), Regular r) => Routers r
 mkRouters = mkRouters' to (Just . from)
 

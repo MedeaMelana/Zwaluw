@@ -1,14 +1,16 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Web.Zwaluw.TH where
+module Web.Zwaluw.TH (deriveRouters) where
 
 import Web.Zwaluw.Core
 import Language.Haskell.TH
 import Control.Monad
 
 
--- Derive routers for all constructors in a datatype.
+-- | Derive routers for all constructors in a datatype. For example: 
+--
+--   @$(deriveRouters \'\'Sitemap)@
 deriveRouters :: Name -> Q [Dec]
 deriveRouters name = do
   info <- reify name
