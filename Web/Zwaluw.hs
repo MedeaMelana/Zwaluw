@@ -16,8 +16,8 @@ module Web.Zwaluw (
   , pure, xmap, xmaph
   , val, readshow, lit
   , opt, duck, satisfy, rFilter, printAs
-  , manyr, somer, chainr1 
-  , manyl, somel, chainl1
+  , manyr, somer, chainr, chainr1 
+  , manyl, somel, chainl, chainl1
   
     -- * Built-in routers
   , int, string, char, digit, hexDigit
@@ -58,6 +58,11 @@ manyr = opt . somer
 somer :: Router r r -> Router r r
 somer p = p . manyr p
 
+-- | @chainr p op@ repeats @p@ zero or more times, separated by @op@. 
+--   The result is a right associative fold of the results of @p@ with the results of @op@.
+chainr :: Router r r -> Router r r -> Router r r
+chainr p op = opt (manyr (p .~ op) . p)
+
 -- | @chainr1 p op@ repeats @p@ one or more times, separated by @op@. 
 --   The result is a right associative fold of the results of @p@ with the results of @op@.
 chainr1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> forall r. Router r (a :- r)
@@ -70,6 +75,11 @@ manyl = opt . somel
 -- | Repeat a router one or more times, combining the results from right to left.
 somel :: Router r r -> Router r r
 somel p = p .~ manyl p
+
+-- | @chainl1 p op@ repeats @p@ zero or more times, separated by @op@. 
+--   The result is a left associative fold of the results of @p@ with the results of @op@.
+chainl :: Router r r -> Router r r -> Router r r
+chainl p op = opt (p .~ manyl (op . p))
 
 -- | @chainl1 p op@ repeats @p@ one or more times, separated by @op@. 
 --   The result is a left associative fold of the results of @p@ with the results of @op@.
