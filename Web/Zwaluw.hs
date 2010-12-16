@@ -13,7 +13,7 @@ module Web.Zwaluw (
     
     -- * Router combinators
   , pure, xmap, xmaph
-  , val, readshow, lit
+  , val, readshow, lit, push
   , opt, duck, satisfy, rFilter, printAs
   , manyr, somer, chainr, chainr1 
   , manyl, somel, chainl, chainl1
@@ -22,10 +22,11 @@ module Web.Zwaluw (
   , int, string, char, digit, hexDigit
   , (/), part
   
-  , rNil, rCons, rList
+  , rNil, rCons, rList, rListSep
   , rPair
   , rLeft, rRight, rEither
   , rNothing, rJust, rMaybe
+  , rTrue, rFalse
   ) where
 
 import Prelude hiding ((.), id, (/))
@@ -91,7 +92,9 @@ rFilter p r = val
   (\s -> [ (a, s') | (f, s') <- prs r s, let a = hhead (f ()), p a ])
   (\a -> [ f | p a, (f, _) <- ser r (a :- ()) ])
 
-
+-- | Push a value on the stack (during parsing, pop it from the stack when serializing).
+push :: Eq a => a -> Router r (a :- r)
+push a = pure (a :-) (\(a' :- t) -> guard (a' == a) >> Just t)
 
 -- | Routes any value that has a Show and Read instance.
 readshow :: (Show a, Read a) => Router r (a :- r)
@@ -143,6 +146,10 @@ rCons = pure (arg (arg (:-)) (:)) $ \(xs :- t) -> do a:as <- Just xs; Just (a :-
 rList :: Router r (a :- r) -> Router r ([a] :- r)
 rList r = manyr (rCons . duck1 r) . rNil
 
+-- | Converts a router for a value @a@ to a router for a list of @a@, with a separator.
+rListSep :: Router r (a :- r) -> Router ([a] :- r) ([a] :- r) -> Router r ([a] :- r)
+rListSep r sep = chainr (rCons . duck1 r) sep . rNil
+
 rPair :: Router (f :- s :- r) ((f, s) :- r)
 rPair = pure (arg (arg (:-)) (,)) $ \(ab :- t) -> do (a,b) <- Just ab; Just (a :- b :- t)
 
@@ -161,3 +168,7 @@ rJust    :: Router (a :- r) (Maybe a :- r)
 -- | Converts a router for a value @a@ to a router for a @Maybe a@.
 rMaybe :: Router r (a :- r) -> Router r (Maybe a :- r)
 rMaybe r = rJust . r <> rNothing
+
+$(deriveRouters ''Bool)
+rTrue  :: Router r (Bool :- r)
+rFalse :: Router r (Bool :- r)
