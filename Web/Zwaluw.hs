@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -65,8 +64,8 @@ chainr p op = opt (manyr (p .~ op) . p)
 
 -- | @chainr1 p op@ repeats @p@ one or more times, separated by @op@. 
 --   The result is a right associative fold of the results of @p@ with the results of @op@.
-chainr1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> forall r. Router r (a :- r)
-chainr1 p op = manyr (p .~ op) . p
+chainr1 :: Router r (a :- r) -> Router (a :- a :- r) (a :- r) -> Router r (a :- r)
+chainr1 p op = manyr (duck1 p .~ op) . p
 
 -- | Repeat a router zero or more times, combining the results from right to left.
 manyl :: Router r r -> Router r r
@@ -83,7 +82,7 @@ chainl p op = opt (p .~ manyl (op . p))
 
 -- | @chainl1 p op@ repeats @p@ one or more times, separated by @op@. 
 --   The result is a left associative fold of the results of @p@ with the results of @op@.
-chainl1 :: (forall r. Router r (a :- r)) -> (forall r. Router (a :- a :- r) (a :- r)) -> forall r. Router r (a :- r)
+chainl1 :: Router r (a :- r) -> Router (a :- a :- r) (a :- r) -> Router r (a :- r)
 chainl1 p op = p .~ manyl (op . duck p)
 
 -- | Filtering on routers.
@@ -141,8 +140,8 @@ rCons :: Router (a :- [a] :- r) ([a] :- r)
 rCons = pure (arg (arg (:-)) (:)) $ \(xs :- t) -> do a:as <- Just xs; Just (a :- as :- t)
 
 -- | Converts a router for a value @a@ to a router for a list of @a@.
-rList :: (forall r. Router r (a :- r)) -> forall r. Router r ([a] :- r)
-rList r = manyr (rCons . r) . rNil
+rList :: Router r (a :- r) -> Router r ([a] :- r)
+rList r = manyr (rCons . duck1 r) . rNil
 
 rPair :: Router (f :- s :- r) ((f, s) :- r)
 rPair = pure (arg (arg (:-)) (,)) $ \(ab :- t) -> do (a,b) <- Just ab; Just (a :- b :- t)

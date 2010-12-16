@@ -12,7 +12,7 @@ module Web.Zwaluw.Core (
     
   , xmap, pure, lit, xmaph
   , hhead, htail, hdMap, hdTraverse, pop, arg
-  , val, duck, printAs
+  , val, duck, duck1, printAs
   ) where
 
 import Prelude hiding ((.), id, (/))
@@ -128,6 +128,12 @@ duck :: Router r1 r2 -> Router (h :- r1) (h :- r2)
 duck r = Router
   (map (first (\f (h :- t) -> h :- f t)) . prs r)
   (\(h :- t) -> map (second (h :-)) $ ser r t)
+
+-- | Convert a router to do what it does on the tail of the stack.
+duck1 :: Router r1 (a :- r2) -> Router (h :- r1) (a :- h :- r2)
+duck1 r = Router
+  (map (first (\f (h :- t) -> let a :- t' = f t in a :- h :- t')) . prs r)
+  (\(a :- h :- t) -> map (second (h :-)) $ ser r (a :- t))
 
 -- | @r \`printAs\` s@ uses ther serializer of @r@ to test if serializing succeeds,
 --   and if it does, instead serializes as @s@. 
