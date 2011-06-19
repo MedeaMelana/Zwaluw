@@ -19,7 +19,7 @@ module Web.Zwaluw (
   , manyl, somel, chainl, chainl1
   
     -- * Built-in routers
-  , int, string, char, digit, hexDigit
+  , int, integer, string, char, digit, hexDigit
   , (/), part
   
   , rNil, rCons, rList, rListSep
@@ -100,9 +100,13 @@ push a = pure (a :-) (\(a' :- t) -> guard (a' == a) >> Just t)
 readshow :: (Show a, Read a) => Router r (a :- r)
 readshow = val reads (return . shows)
 
--- | Routes any integer.
+-- | Routes any @Int@.
 int :: Router r (Int :- r)
 int = readshow
+
+-- | Routes any @Integer@.
+integer :: Router r (Integer :- r)
+integer = readshow
 
 -- | Routes any string.
 string :: Router r (String :- r)
