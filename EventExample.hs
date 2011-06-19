@@ -40,10 +40,10 @@ wide, thin, collapsed :: Router r (Layout :- r)
 -- Custom routers, tying a URL format to the datatypes
 
 rEvent :: Router r (Event :- r)
-rEvent = event / "event" / "id" / rJust . integer / rFalse . "layout" / layout
+rEvent = event / "event" / "id" / rJust . integer / rFalse . "layout" / rLayout
 
-layout :: Router r (Layout :- r)
-layout = wide      . "wide"
+rLayout :: Router r (Layout :- r)
+rLayout = wide      . "wide"
       <> thin      . "thin"
       <> collapsed . "collapsed"
 
