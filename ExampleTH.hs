@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE NoMonoPatBinds #-}
 
 import Web.Zwaluw
 import Web.Zwaluw.TH
@@ -13,12 +14,12 @@ import Control.Category
 
 data Sitemap
    = Home
-   | UserOverview
-   | UserDetail Int
-   | Article Int String
+   | CatOverview
+   | CatDetail Int
+   | Product Int String
    deriving (Eq, Show)
 
-$(deriveRouters ''Sitemap)
+(rHome, rCatOverview, rCatDetail, rProduct) = $(deriveRouterTuple ''Sitemap)
 
 
 -- The router. Specifies how to parse a URL into a Sitemap and back.
@@ -26,9 +27,9 @@ $(deriveRouters ''Sitemap)
 sitemap :: Router r (Sitemap :- r)
 sitemap = id /
     (  rHome
-    <> "users" . users
-    <> rArticle . ("article" / int . "-" . part)
+    <> "categories" . cats
+    <> rProduct . ("product" / int . "-" . part)
     )
   where
-    users  = rUserOverview
-          <> rUserDetail / int
+    cats =  rCatOverview
+         <> rCatDetail / int
