@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Web.Zwaluw.TH (deriveRouters) where
+module Web.Zwaluw.TH (deriveRouters, deriveRouterTuple) where
 
 import Web.Zwaluw.Core
 import Language.Haskell.TH
@@ -23,6 +23,18 @@ deriveRouters name = do
       fail $ show name ++ " is not a datatype."
 
 
+deriveRouterTuple :: Name -> Q Exp
+deriveRouterTuple name = do
+  info <- reify name
+  case info of
+    TyConI (DataD _ _ _ cons _)   ->
+      TupE `liftM` mapM deriveRouter' cons
+    TyConI (NewtypeD _ _ _ con _) ->
+      deriveRouter' con
+    _ ->
+      fail $ show name ++ " is not a datatype."
+
+
 -- Derive a router for a single constructor.
 deriveRouter :: Con -> Q [Dec]
 deriveRouter con =
@@ -39,6 +51,20 @@ deriveRouter con =
       expr <- [| pure $(deriveConstructor name (length tys))
                      $(deriveDestructor name tys) |]
       return [FunD name' [Clause [] (NormalB expr) []]]
+
+--
+
+deriveRouter' :: Con -> Q Exp
+deriveRouter' con =
+  case con of
+    NormalC name tys -> go name (map snd tys)
+    RecC name tys -> go name (map (\(_,_,ty) -> ty) tys)
+    _ -> do
+      fail $ "Skipping unsupported constructor " ++ show (conName con)
+  where
+    go name tys = do
+      [| pure $(deriveConstructor name (length tys))
+              $(deriveDestructor name tys) |]
 
 
 -- Derive the contructor part of a router.
